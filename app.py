@@ -120,30 +120,34 @@ st.markdown(
 # IMAGE UPLOAD
 # -------------------------------------------------
 uploaded = st.file_uploader(
-    "Upload a monument image",
-    type=["jpg", "jpeg", "png"]
+    "Upload a monument image (JPG/PNG)",
+    type=["jpg", "jpeg", "png"],
+    help="Supported formats: JPG, PNG. Max size: 10MB."
 )
 
 if uploaded:
-    st.session_state.image_bytes = uploaded.read()
-    img = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGB")
-    st.image(img, caption="Uploaded monument", use_container_width=True)
+    try:
+        st.session_state.image_bytes = uploaded.read()
+        img = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGB")
+        st.image(img, caption="Uploaded monument", use_container_width=True)
 
-    if st.button("Awaken the Echo"):
-        with st.spinner("Listening across centuries…"):
-            text = ""
-            for chunk in generate_analysis_stream(
-                image_bytes=st.session_state.image_bytes,
-                system_prompt=SYSTEM_PROMPT
-            ):
-                text += chunk
+        if st.button("Awaken the Echo", help="Analyze the image using AI. This may take a moment."):
+            with st.spinner("Listening across centuries…"):
+                text = ""
+                for chunk in generate_analysis_stream(
+                    image_bytes=st.session_state.image_bytes,
+                    system_prompt=SYSTEM_PROMPT
+                ):
+                    text += chunk
 
-            try:
-                st.session_state.analysis = json.loads(text)
-                st.success("The echo has awakened.")
-            except Exception:
-                st.error("The monument’s voice was unclear. Try another image.")
-                st.session_state.analysis = None
+                try:
+                    st.session_state.analysis = json.loads(text)
+                    st.success("The echo has awakened.")
+                except json.JSONDecodeError:
+                    st.error("The monument’s voice was unclear. The analysis may be incomplete.")
+                    st.session_state.analysis = None
+    except Exception as e:
+        st.error(f"Error processing image: {str(e)}. Please try a different file.")
 
 # -------------------------------------------------
 # RESULTS — CLEAN, CURATED PRESENTATION
@@ -167,15 +171,17 @@ if res:
     st.markdown(f"**Period / Dynasty:** {arch.get('period_or_dynasty','unknown')}")
 
     st.markdown("**Primary Materials:**")
-    if arch.get("primary_materials"):
-        for m in arch["primary_materials"]:
+    materials = arch.get("primary_materials", [])
+    if materials:
+        for m in materials:
             st.markdown(f"- {m}")
     else:
         st.markdown("unknown")
 
     st.markdown("**Notable Features:**")
-    if arch.get("distinct_features_visible"):
-        for f in arch["distinct_features_visible"]:
+    features = arch.get("distinct_features_visible", [])
+    if features:
+        for f in features:
             st.markdown(f"- {f}")
     else:
         st.markdown("unknown")
@@ -189,19 +195,20 @@ if res:
     st.header("Visible Damage Assessment")
     damages = res.get("visible_damage_assessment", [])
 
-    if damages:
+    if damages and any(d.get("damage_type") != "none observed" for d in damages):
         base = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGBA")
         overlay = draw_damage_overlay(base, damages)
-        st.image(overlay, caption="Detected damage zones", use_container_width=True)
+        st.image(overlay, caption="Detected damage zones (red overlays)", use_container_width=True)
 
         for d in damages:
-            st.markdown(
-                f"""
-                **Damage Type:** {d.get('damage_type','unknown')}  
-                **Severity:** {d.get('severity','unknown')}  
-                **Probable Cause:** {d.get('probable_cause','unknown')}
-                """
-            )
+            if d.get("damage_type") != "none observed":
+                st.markdown(
+                    f"""
+                    **Damage Type:** {d.get('damage_type','unknown')}  
+                    **Severity:** {d.get('severity','unknown')}  
+                    **Probable Cause:** {d.get('probable_cause','unknown')}
+                    """
+                )
     else:
         st.info("No visible major damage detected.")
 
@@ -210,10 +217,17 @@ if res:
     st.header("Restoration Guidance")
     st.markdown(f"**Can be restored:** {rest.get('can_be_restored','unknown')}")
 
-    if rest.get("recommended_methods"):
+    methods = rest.get("recommended_methods", [])
+    if methods:
         st.markdown("**Recommended Methods:**")
-        for r in rest["recommended_methods"]:
+        for r in methods:
             st.markdown(f"- {r}")
+
+    measures = rest.get("preventive_measures", [])
+    if measures:
+        st.markdown("**Preventive Measures:**")
+        for p in measures:
+            st.markdown(f"- {p}")
 
     # Story
     story = res.get("first_person_narrative", {}).get("story_from_monument_perspective","")
@@ -222,5 +236,3 @@ if res:
         st.markdown(f"<div class='story'>{story}</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-
