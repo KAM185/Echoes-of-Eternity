@@ -1,9 +1,15 @@
 import json
 import time
 from openai import OpenAI
+import streamlit as st
 
 # ---------------- Initialize 8 Gemini models ----------------
-def init_gemini_models(api_key: str):
+def init_gemini_models():
+    """
+    Returns OpenAI client and list of 8 Gemini models.
+    Uses API key from Streamlit secrets.
+    """
+    api_key = st.secrets["GEMINI_API_KEY"]
     client = OpenAI(api_key=api_key)
     models = [
         "gemini-3-pro-preview",
@@ -19,6 +25,9 @@ def init_gemini_models(api_key: str):
 
 # ---------------- Generate Analysis ----------------
 def generate_analysis(client, models, prompt: str, max_retries: int = 2):
+    """
+    Calls 8 Gemini models with retries. Uses text-only placeholder <image>.
+    """
     last_exception = None
 
     for model_name in models:
@@ -35,13 +44,14 @@ def generate_analysis(client, models, prompt: str, max_retries: int = 2):
                 try:
                     return json.loads(raw)
                 except Exception:
-                    # last-resort cleanup
+                    # Last-resort cleanup
                     cleaned = raw.strip().split("{",1)[-1]
                     cleaned = "{" + cleaned
                     return json.loads(cleaned)
             except Exception as e:
                 last_exception = e
                 if attempt < max_retries - 1:
+                    time.sleep(1)
                     continue
                 print(f"Model {model_name} attempt {attempt+1} failed: {e}")
                 break
@@ -50,11 +60,12 @@ def generate_analysis(client, models, prompt: str, max_retries: int = 2):
 
 # ---------------- Draw Damage Overlay ----------------
 def draw_damage_overlay(image, damages):
-    return image.copy()  # simple placeholder
+    # Simple placeholder; can be extended to draw damage
+    return image.copy()
 
-# ---------------- Chat with Monument ----------------
+# ---------------- Chat With Monument ----------------
 def chat_with_monument(analysis, chat_history, question, chat_prompt):
-    client, models = init_gemini_models("<YOUR_API_KEY_HERE>")
+    client, models = init_gemini_models()
     prompt = chat_prompt + "\n" + question
     result = generate_analysis(client, models, prompt)
     return result.get("reply", "The monument remains silent.")
