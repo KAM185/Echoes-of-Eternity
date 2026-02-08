@@ -22,22 +22,23 @@ st.set_page_config(
 # ---------------- GLOBAL CSS ----------------
 st.markdown("""
 <style>
-/* Page background - slightly darker */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Uncial+Antiqua&display=swap');
+
 html, body, [data-testid="stAppViewContainer"] {
     background: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true")
                 no-repeat center center fixed;
     background-size: cover;
-    filter: brightness(0.75);  /* darken the background slightly */
+    filter: brightness(0.7);  /* darken background */
 }
 
-/* Remove Streamlit default header/footer */
+/* Remove Streamlit header/footer */
 [data-testid="stHeader"], footer {
     background: transparent;
 }
 
-/* Title container - fully transparent glass */
+/* Title container */
 .title-glass {
-    background: rgba(18, 22, 40, 0.25);
+    background: rgba(18,22,40,0.25);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 15px;
@@ -49,25 +50,27 @@ html, body, [data-testid="stAppViewContainer"] {
     text-align: center;
 }
 
-/* Ancient, imposing, golden title */
+/* Shimmering golden title */
+@keyframes shimmer {
+    0% { text-shadow: 0 0 10px #ffd700, 0 0 20px #ffec99, 0 0 30px #ffd700, 0 0 40px rgba(255,215,0,0.5);}
+    50% { text-shadow: 0 0 15px #fff5a1, 0 0 25px #ffe080, 0 0 35px #ffd700, 0 0 45px rgba(255,223,0,0.7);}
+    100% { text-shadow: 0 0 10px #ffd700, 0 0 20px #ffec99, 0 0 30px #ffd700, 0 0 40px rgba(255,215,0,0.5);}
+}
+
 .title-glass h1 {
-    font-family: "Uncial Antiqua", "Cinzel Decorative", "Cinzel", serif;  /* ancient fonts */
+    font-family: 'Uncial Antiqua', 'Cinzel Decorative', serif;
     font-size: 5rem;
-    color: #ffd700;  /* gold */
-    text-shadow: 
-        0 0 10px #ffd700,
-        0 0 20px #ffec99,
-        0 0 30px #ffd700,
-        0 0 40px rgba(255,215,0,0.5);
+    color: #ffd700;
+    animation: shimmer 2.5s infinite;
     margin: 0;
 }
 
-/* Subtitle below title */
+/* Subtitle */
 .title-glass p {
-    font-family: "Cardo", Georgia, serif;
+    font-family: 'Cinzel Decorative', Georgia, serif;
     font-size: 1.5rem;
-    color: rgba(255,223,0,0.85);
-    text-shadow: 0 0 5px rgba(255,223,0,0.4);
+    color: rgba(255,223,0,0.9);
+    text-shadow: 0 0 5px rgba(255,223,0,0.5);
 }
 
 /* Glass container - rectangular */
@@ -83,7 +86,7 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: 0 15px 50px rgba(0,0,0,0.4);
 }
 
-/* Story block inside container */
+/* Story block */
 .story {
     font-family: Georgia, serif;
     font-size: 1.25rem;
@@ -96,11 +99,11 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Section subtitles */
 h2, h3 {
-    color: #ffd700;  /* gold */
+    color: #ffd700;
     text-shadow: 0 0 10px rgba(255,215,0,0.6);
 }
 
-/* Chat box scroll */
+/* Chat scroll */
 .chat-container {
     max-height: 300px;
     overflow-y: auto;
@@ -164,7 +167,7 @@ if file:
 
                 except Exception as e:
                     st.error("The monument could not speak. Please try again later.")
-                    st.error(f"Debug info: {str(e)}")  # Remove in production
+                    st.error(f"Debug info: {str(e)}")  # remove in production
 
 # ---------------- RESULTS ----------------
 res = st.session_state.analysis
@@ -222,4 +225,3 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
