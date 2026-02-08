@@ -26,29 +26,45 @@ st.set_page_config(
 # Page title
 # ────────────────────────────────────────────────
 st.markdown(
-    "<h1>Echoes of Eternity</h1>", 
+    "<h1>Echoes of Eternity</h1>",
     unsafe_allow_html=True
 )
 st.markdown(
-    '<h3><em>Whispers of history in every stone</em></h3>', 
+    '<h3><em>Whispers of history in every stone</em></h3>',
     unsafe_allow_html=True
 )
 
 # ────────────────────────────────────────────────
-# Background + transparent UI + glowing title
+# Background + cinematic glowing title + glass UI
 # ────────────────────────────────────────────────
 bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
 
 st.markdown(
     f"""
     <style>
+        /* App background */
         .stApp {{
             background: url('{bg_url}') center/cover no-repeat fixed !important;
             background-color: #0a0e1a;
+            position: relative;
         }}
+
+        /* Dark overlay behind title for readability */
+        .stApp::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 400px;
+            background: rgba(0,0,0,0.5);
+            z-index: 0;
+        }}
+
         section[data-testid="stAppViewContainer"] {{
             background: rgba(8, 10, 22, 0.25) !important;
         }}
+
         .block-container {{
             background: rgba(18, 22, 38, 0.32) !important;
             backdrop-filter: blur(14px);
@@ -58,9 +74,11 @@ st.markdown(
             margin: 2rem auto;
             max-width: 1150px;
             border: 1px solid rgba(190, 160, 255, 0.20);
+            position: relative;
+            z-index: 1;
         }}
 
-        /* Strong mysterious golden-blue glowing title */
+        /* Cinematic glowing title */
         h1 {{
             font-family: 'Georgia', serif;
             font-size: 5rem !important;
@@ -73,30 +91,37 @@ st.markdown(
             background-size: 400% 400%;
             animation: gradientFlow 10s ease infinite;
             text-shadow: 
-                0 0 30px #a78bfa,
-                0 0 60px #c4a1ff,
-                0 0 90px #ffd07a,
-                0 0 140px #ffdb8a,
-                0 0 200px #ffd07a;
+                0 0 10px #fff,
+                0 0 25px #a78bfa,
+                0 0 50px #c4a1ff,
+                0 0 75px #ffd07a,
+                0 0 100px #ffdb8a;
             letter-spacing: 5px;
-            margin: 0.5rem 0 1.2rem 0;
-            filter: drop-shadow(0 0 45px rgba(190, 160, 255, 0.9));
+            margin: 1rem 0 1.5rem 0;
+            -webkit-text-stroke: 0.5px rgba(255,255,255,0.2);
+            filter: drop-shadow(0 0 35px rgba(190, 160, 255, 0.9));
+            position: relative;
+            z-index: 2;
         }}
-        @keyframes gradientFlow {{
-            0% {{ background-position: 0% 50%; }}
-            50% {{ background-position: 100% 50%; }}
-            100% {{ background-position: 0% 50%; }}
-        }}
+
         h3 em {{
             font-size: 2rem;
             color: #d4b37a !important;
             text-align: center;
             display: block;
-            opacity: 0.92;
+            opacity: 0.95;
             text-shadow: 0 2px 15px #000;
+            position: relative;
+            z-index: 2;
         }}
 
-        /* Fully transparent/glass elements */
+        @keyframes gradientFlow {{
+            0% {{ background-position: 0% 50%; }}
+            50% {{ background-position: 100% 50%; }}
+            100% {{ background-position: 0% 50%; }}
+        }}
+
+        /* Glass-like UI for upload and buttons */
         .stFileUploader [data-testid="stFileUploaderDropzone"] {{
             background: rgba(25, 30, 50, 0.25) !important;
             border: 2px dashed #a78bfa !important;
