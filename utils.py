@@ -25,6 +25,7 @@ def init_gemini():
 # Gemini model pool (prioritize Gemini 3 variants first, then fallbacks)
 # -------------------------------------------------
 GEMINI_MODELS = [
+    "gemini-1.0-pro",
     "gemini-3-pro-preview",
     "gemini-3-pro-vision-preview",
     "gemini-3.0-pro",
@@ -32,7 +33,7 @@ GEMINI_MODELS = [
     "gemini-3-flash-vision-preview",
     "gemini-1.5-pro",  # Fallback
     "gemini-1.5-flash",  # Fallback
-    "gemini-1.0-pro",  # Older fallback
+      # Older fallback
 ]
 
 
