@@ -22,48 +22,55 @@ st.set_page_config(
 # ---------------- GLOBAL CSS ----------------
 st.markdown("""
 <style>
+/* Page background */
 html, body, [data-testid="stAppViewContainer"] {
     background: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true")
                 no-repeat center center fixed;
     background-size: cover;
 }
 
-/* Remove Streamlit white layers */
+/* Remove Streamlit default header/footer */
 [data-testid="stHeader"], footer {
     background: transparent;
 }
 
-/* TRUE glass container */
+/* Glass container - rectangular and transparent */
 .glass {
-    background: rgba(18, 22, 40, 0.38);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border-radius: 26px;
-    padding: 3rem;
+    background: rgba(18, 22, 40, 0.25);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-radius: 15px;
+    padding: 2rem 3rem;
     margin: 2rem auto;
-    max-width: 1300px;
-    border: 1px solid rgba(255,255,255,0.18);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    max-width: 1200px;
+    border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 15px 50px rgba(0,0,0,0.4);
 }
 
-/* Title */
+/* Ancient-looking title */
 h1 {
-    font-family: Georgia, serif;
-    font-size: 4.5rem;
+    font-family: "Cinzel", serif;
+    font-size: 4rem;
     text-align: center;
     color: #f6e8c9;
-    text-shadow: 0 0 40px rgba(255,210,140,0.9);
+    text-shadow: 0 0 15px #ffd77f, 0 0 25px #f6e8c9;
 }
 
-/* Story block */
+/* Story block inside container */
 .story {
     font-family: Georgia, serif;
     font-size: 1.25rem;
     line-height: 1.9;
-    background: rgba(255,255,255,0.08);
-    padding: 2.5rem;
-    border-radius: 20px;
-    box-shadow: inset 0 0 30px rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.07);
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: inset 0 0 20px rgba(255,255,255,0.07);
+}
+
+/* Subtitles for sections */
+h2, h3 {
+    color: #ffeabf;
+    text-shadow: 0 0 10px rgba(255,235,190,0.8);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -170,4 +177,3 @@ if res:
         st.markdown(f"**{speaker}:** {m['content']}")
 
     st.markdown("</div>", unsafe_allow_html=True)
-
