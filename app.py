@@ -331,3 +331,4 @@ if question and question.strip():
 for msg in st.session_state.chat_history:
     role = "You" if msg["role"] == "user" else "Monument"
     st.markdown(f"**{role}:** {msg['content']}")
+
