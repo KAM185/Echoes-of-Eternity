@@ -1,150 +1,103 @@
 import os
-import time
 import json
+import time
 import tempfile
-from typing import Generator, Tuple
+from typing import List
 
-import streamlit as st
-import google.generativeai as genai
-from PIL import Image, ImageDraw
+from PIL import Image, ImageEnhance, ImageFilter
 from gtts import gTTS
 
+import google.generativeai as genai
+import streamlit as st
 
 # -------------------------------------------------
-# Gemini model initialization (cached)
+# Gemini configuration
 # -------------------------------------------------
 @st.cache_resource
 def init_gemini(model_name: str):
-    """
-    Initialize and cache a Gemini model.
-    API key is read securely from environment variable.
-    """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY not found. Please set it in environment variables or Streamlit secrets."
-        )
+        raise RuntimeError("GEMINI_API_KEY is not set")
 
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
 
+# -------------------------------------------------
+# Model cascade (7 models)
+# -------------------------------------------------
+MODEL_PRIORITY: List[str] = [
+    "gemini-3-pro-preview",
+    "gemini-3-pro",
+    "gemini-3-flash-preview",
+    "gemini-3-flash",
+    "gemini-2.5-pro-preview",
+    "gemini-2.0-pro",
+    "gemini-1.5-pro",
+]
 
 # -------------------------------------------------
-# Gemini image analysis with streaming + fallback
+# Safe image enhancement (viewer-only)
 # -------------------------------------------------
-def generate_analysis_stream(
-    image: Image.Image,
-    prompt: str,
-    primary_model: str,
-    fallback_model: str,
-) -> Tuple[Generator[str, None, None], dict]:
-    """
-    Stream Gemini analysis text and return parsed JSON result.
-    """
-    accumulated_text = ""
+def enhance_for_viewing(image: Image.Image) -> Image.Image:
+    enhanced = image.copy()
 
-    def stream_generator():
-        nonlocal accumulated_text
+    enhanced = ImageEnhance.Contrast(enhanced).enhance(1.15)
+    enhanced = ImageEnhance.Brightness(enhanced).enhance(1.05)
 
+    enhanced = enhanced.filter(
+        ImageFilter.UnsharpMask(
+            radius=1,
+            percent=80,
+            threshold=3,
+        )
+    )
+
+    return enhanced
+
+# -------------------------------------------------
+# Gemini analysis with cascade
+# -------------------------------------------------
+def generate_analysis(image: Image.Image, prompt: str) -> dict:
+    last_error = None
+
+    for model_name in MODEL_PRIORITY:
         try:
-            model = init_gemini(primary_model)
+            model = init_gemini(model_name)
             response = model.generate_content(
                 [prompt, image],
-                stream=True,
                 generation_config={
                     "response_mime_type": "application/json"
                 },
             )
-        except Exception:
-            st.warning("Primary model unavailable. Falling back to faster model…")
-            model = init_gemini(fallback_model)
-            response = model.generate_content(
-                [prompt, image],
-                stream=True,
-                generation_config={
-                    "response_mime_type": "application/json"
-                },
-            )
 
-        for chunk in response:
-            if hasattr(chunk, "text") and chunk.text:
-                accumulated_text += chunk.text
-                yield chunk.text
+            text = response.text.strip()
 
-    # Run stream once to completion
-    for _ in stream_generator():
-        pass
+            if text.startswith("```"):
+                text = text.split("```", 2)[1]
 
-    # Attempt JSON parsing with retries
-    parsed = {}
-    for attempt in range(3):
-        try:
-            parsed = json.loads(accumulated_text)
-            break
-        except json.JSONDecodeError:
+            return json.loads(text)
+
+        except Exception as e:
+            last_error = e
             time.sleep(0.6)
 
-    return stream_generator(), parsed
-
-
-# -------------------------------------------------
-# Draw damage overlay on image
-# -------------------------------------------------
-def draw_damage_overlay(
-    image: Image.Image,
-    damaged_areas: list,
-) -> Image.Image:
-    """
-    Draw semi-transparent overlays for damaged areas.
-    """
-    if not damaged_areas:
-        return image
-
-    base = image.convert("RGBA")
-    overlay = Image.new("RGBA", base.size, (255, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    width, height = base.size
-
-    for area in damaged_areas:
-        bbox = area.get("bbox")
-        if not bbox or len(bbox) != 4:
-            continue
-
-        x1, y1, x2, y2 = bbox
-        rect = [
-            int(x1 * width),
-            int(y1 * height),
-            int(x2 * width),
-            int(y2 * height),
-        ]
-
-        draw.rectangle(
-            rect,
-            outline=(255, 0, 0, 200),
-            fill=(255, 0, 0, 80),
-        )
-
-    return Image.alpha_composite(base, overlay)
-
+    raise RuntimeError(
+        f"All Gemini models failed. Last error: {last_error}"
+    )
 
 # -------------------------------------------------
-# Text-to-Speech generation
+# Audio narration (TTS)
 # -------------------------------------------------
-def generate_audio(text: str) -> str:
-    """
-    Generate narration audio using gTTS.
-    Returns path to temporary mp3 file, or empty string on failure.
-    """
-    if not text.strip():
-        return ""
-
+def generate_audio(text: str) -> str | None:
     try:
-        tts = gTTS(text=text, lang="en")
-        tmp_file = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".mp3"
-        )
-        tts.save(tmp_file.name)
-        return tmp_file.name
+        tts = gTTS(text=text, lang="en", slow=False)
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".mp3"
+        ) as f:
+            tts.save(f.name)
+            return f.name
+
     except Exception:
-        return ""
+        return None
