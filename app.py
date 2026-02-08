@@ -1,103 +1,173 @@
-import json
-import os
 import streamlit as st
 from PIL import Image
-from utils import init_gemini, generate_analysis, draw_damage_overlay, generate_audio
-from prompts import SYSTEM_PROMPT, ANALYSIS_PROMPT, CHAT_PROMPT
+import io
+import json
 
-# ── FORCE DARK MODE ─────────────────────────────
+from utils import (
+    generate_analysis_stream,
+    draw_damage_overlay
+)
+from prompts import SYSTEM_PROMPT
+
+# -------------------------------------------------
+# Page config — force dark, icon, title
+# -------------------------------------------------
 st.set_page_config(
     page_title="Echoes of Eternity",
     page_icon="🔊",
-    layout="centered",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-init_gemini()
-
-# ── BACKGROUND + GLASS UI ───────────────────────
-bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
+# -------------------------------------------------
+# Global CSS — dark mode + background + glass box
+# -------------------------------------------------
 st.markdown(
-    f"""
+    """
     <style>
-    .stApp {{
-        background: url('{bg_url}') no-repeat center center fixed;
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #0b0e14;
+        color: #f0f0f0;
+    }
+
+    .bg-layer {
+        position: fixed;
+        inset: 0;
+        background-image: url("https://images.unsplash.com/photo-1588594276800-2de0522b3b73");
         background-size: cover;
-    }}
-    .block-container {{
-        background: rgba(10, 12, 20, 0.55);
-        backdrop-filter: blur(14px);
-        border-radius: 20px;
-        padding: 3rem;
-    }}
-    h1 {{
-        text-align: center;
-        font-size: 4rem;
-        font-family: Georgia, serif;
-    }}
+        background-position: center;
+        opacity: 0.25;
+        z-index: -2;
+    }
+
+    .glass-box {
+        background: rgba(20, 24, 38, 0.78);
+        border-radius: 18px;
+        padding: 2rem;
+        margin-top: 2rem;
+        box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    }
+
+    h1, h2, h3 {
+        font-family: "Georgia", serif;
+    }
     </style>
+
+    <div class="bg-layer"></div>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
 
-# ── TITLE ───────────────────────────────────────
-st.markdown("<h1>Echoes of Eternity</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>When ancient stones finally speak.</p>", unsafe_allow_html=True)
+# -------------------------------------------------
+# Session state
+# -------------------------------------------------
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
 
-# ── STATE ───────────────────────────────────────
-if "analysis" not in st.session_state:
-    st.session_state.analysis = None
-if "image" not in st.session_state:
-    st.session_state.image = None
+if "image_bytes" not in st.session_state:
+    st.session_state.image_bytes = None
 
-# ── UPLOAD ──────────────────────────────────────
-file = st.file_uploader("Upload a monument image", type=["jpg", "png", "jpeg"])
-if file:
-    img = Image.open(file).convert("RGB")
-    st.session_state.image = img
-    st.image(img, caption="Original uploaded image", use_container_width=True)
+# -------------------------------------------------
+# Hero section
+# -------------------------------------------------
+st.markdown(
+    """
+    <div class="glass-box">
+        <h1>Echoes of Eternity</h1>
+        <h3><em>When ancient stones finally speak.</em></h3>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-# ── ANALYZE ─────────────────────────────────────
-if st.button("Awaken the Echo", disabled=st.session_state.image is None):
-    with st.spinner("Listening across centuries..."):
-        result = generate_analysis(
-            st.session_state.image,
-            SYSTEM_PROMPT + ANALYSIS_PROMPT
-        )
-        st.session_state.analysis = result
+# -------------------------------------------------
+# Upload section
+# -------------------------------------------------
+uploaded_file = st.file_uploader(
+    "Upload a monument image",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=False
+)
 
-# ── DISPLAY ─────────────────────────────────────
-res = st.session_state.analysis
-if isinstance(res, dict) and "monument_identification" in res:
-    st.success("The echo has awakened.")
+if uploaded_file:
+    image_bytes = uploaded_file.read()
+    st.session_state.image_bytes = image_bytes
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    st.subheader("Monument Identification")
-    st.json(res["monument_identification"])
+    st.image(image, caption="Original uploaded image", use_container_width=True)
 
-    st.subheader("Architecture")
-    st.json(res["architectural_analysis"])
+    if st.button("Awaken the Echo", use_container_width=False):
+        with st.spinner("Listening to the stones…"):
+            streamed_text = ""
 
-    st.subheader("History")
-    st.json(res["historical_facts"])
+            try:
+                for chunk in generate_analysis_stream(
+                    image_bytes=image_bytes,
+                    system_prompt=SYSTEM_PROMPT
+                ):
+                    streamed_text += chunk
 
-    st.subheader("Preservation")
-    st.json(res["visible_damage_assessment"])
+                result = json.loads(streamed_text)
+                st.session_state.analysis_result = result
+                st.success("The echo has awakened.")
 
-    overlay = draw_damage_overlay(
-        st.session_state.image,
-        res.get("visible_damage_assessment", [])
+            except Exception as e:
+                st.error("The monument could not speak clearly. Please try another image.")
+                st.session_state.analysis_result = None
+
+# -------------------------------------------------
+# Display analysis
+# -------------------------------------------------
+result = st.session_state.analysis_result
+
+if result:
+    st.markdown("<div class='glass-box'>", unsafe_allow_html=True)
+
+    # ---------- Identification ----------
+    st.header("Monument Identification")
+    st.json(result.get("monument_identification", {}))
+
+    # ---------- Architecture ----------
+    st.header("Architecture")
+    st.json(result.get("architectural_analysis", {}))
+
+    # ---------- History ----------
+    st.header("Historical Context")
+    st.markdown(result.get("historical_facts", {}).get("summary", "unknown"))
+
+    # ---------- Damage + overlay ----------
+    st.header("Visible Damage Assessment")
+
+    damage_list = result.get("visible_damage_assessment", [])
+
+    if damage_list and st.session_state.image_bytes:
+        base_img = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGBA")
+        overlay_img = draw_damage_overlay(base_img, damage_list)
+        st.image(overlay_img, caption="Detected damage areas", use_container_width=True)
+
+        for dmg in damage_list:
+            with st.expander(dmg.get("damage_type", "Damage")):
+                st.write(dmg)
+    else:
+        st.info("No visible major damage detected.")
+
+    # ---------- Conservation ----------
+    st.header("Conservation Issues")
+    st.json(result.get("documented_conservation_issues", []))
+
+    # ---------- Restoration ----------
+    st.header("Restoration Guidance")
+    st.json(result.get("restoration_guidance", {}))
+
+    # ---------- Story ----------
+    st.header("The Monument Speaks")
+    st.markdown(
+        f"""
+        <blockquote style="font-size:1.1rem; font-family:Georgia,serif;">
+        {result.get("first_person_narrative", {}).get("story_from_monument_perspective", "")}
+        </blockquote>
+        """
     )
-    st.image(overlay, caption="Damage overlay", use_container_width=True)
 
-    story = res["first_person_narrative"]["story_from_monument_perspective"]
-    if story:
-        st.markdown(f"> *{story}*")
-        audio = generate_audio(story)
-        if audio:
-            st.audio(audio)
-            os.unlink(audio)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.download_button(
-        "Download JSON",
-        json.dumps(res, indent=2),
-        file_name="echoes_of_eternity.json",
-    )
