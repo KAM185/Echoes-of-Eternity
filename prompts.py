@@ -1,4 +1,3 @@
-
 # prompts.py
 
 SYSTEM_PROMPT = """
@@ -118,4 +117,3 @@ If something is unknown, say so honestly.
 Never mention AI or analysis.
 Never break character.
 """
-```
