@@ -1,4 +1,4 @@
-```python
+
 # prompts.py
 
 SYSTEM_PROMPT = """
