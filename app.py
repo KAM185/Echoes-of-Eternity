@@ -23,72 +23,42 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────
-# Moving blue fog video background (your video)
+# Background image (your uploaded bg_final.jpg)
 # ────────────────────────────────────────────────
-video_url = "https://files.catbox.moe/b361zg.mp4"
+bg_url = "https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true"
 
-st.components.v1.html(
+st.markdown(
     f"""
     <style>
-        #bg-video {{
-            position: fixed;
-            right: 0;
-            bottom: 0;
-            min-width: 100%;
-            min-height: 100%;
-            width: auto;
-            height: auto;
-            z-index: -100;
-            object-fit: cover;
-            background: #0a0e1a;  /* dark fallback if video fails */
+        .stApp {{
+            background: url('{bg_url}') center/cover no-repeat fixed !important;
+            background-color: #0a0e1a;  /* dark fallback color */
         }}
-        .stApp > div:first-child {{
-            position: relative;
-            z-index: 1;
+        section[data-testid="stAppViewContainer"] {{
+            background: rgba(8, 10, 22, 0.48) !important;  /* balanced overlay */
         }}
-        /* Overlay - tuned to 0.55 so fog is visible but text readable */
-        .overlay {{
-            position: fixed;
-            inset: 0;
-            background: rgba(8, 10, 22, 0.55);
-            z-index: -99;
-            pointer-events: none;
+        .block-container {{
+            background: rgba(18, 22, 38, 0.82) !important;
+            backdrop-filter: blur(8px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            padding: 2.5rem 1.8rem !important;
+            margin: 1rem auto;
+            max-width: 1100px;
         }}
-    </style>
-
-    <div class="overlay"></div>
-    <video autoplay muted loop playsinline id="bg-video">
-        <source src="{video_url}" type="video/mp4">
-    </video>
-    """,
-    height=0
-)
-
-# ────────────────────────────────────────────────
-# Additional styling for better contrast on video bg
-# ────────────────────────────────────────────────
-st.markdown(
-    """
-    <style>
-        h1, h2, h3 {
+        /* Better text contrast on dark background */
+        h1, h2, h3 {{
             color: #f0e0c0 !important;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+            text-shadow: 0 2px 12px rgba(0,0,0,0.9) !important;
             text-align: center;
-        }
-        h1 { font-size: 3.5rem; margin-bottom: 0.4rem; }
-        h3 em { font-size: 1.6rem; opacity: 0.92; display: block; }
-
-        p, div, span, li, label {
+        }}
+        h1 {{ font-size: 3.5rem; margin-bottom: 0.4rem; }}
+        h3 em {{ font-size: 1.6rem; opacity: 0.92; display: block; }}
+        p, div, span, li, label {{
             color: #d8d0b8 !important;
-            text-shadow: 0 1px 5px rgba(0,0,0,0.7);
-        }
-
-        .stFileUploader label {
-            font-size: 1.15rem !important;
-            color: #e0d4b8 !important;
-        }
-
-        .story {
+            text-shadow: 0 1px 6px rgba(0,0,0,0.7) !important;
+        }}
+        .story {{
             background: rgba(25, 28, 45, 0.78) !important;
             border: 1px solid rgba(140, 180, 220, 0.3);
             box-shadow: 0 0 35px rgba(140, 180, 220, 0.15);
@@ -98,24 +68,21 @@ st.markdown(
             font-size: 1.18em;
             line-height: 1.75;
             margin: 2rem 0;
-        }
-
-        .stExpander {
+        }}
+        .stExpander {{
             background: rgba(18, 22, 38, 0.82) !important;
             border: 1px solid rgba(80, 140, 220, 0.4) !important;
             margin: 1rem 0;
-        }
-
-        .stButton > button {
+        }}
+        .stButton > button {{
             background: linear-gradient(90deg, #1e5799, #2989d8) !important;
             color: white !important;
             border: none !important;
             font-weight: 600;
-        }
-
-        .stButton > button:hover {
+        }}
+        .stButton > button:hover {{
             box-shadow: 0 0 25px rgba(41, 137, 216, 0.5) !important;
-        }
+        }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -218,14 +185,12 @@ if st.session_state.analysis_result:
         if not damaged_areas:
             st.info("No significant damaged areas detected.")
 
-    # Overlay
     overlay = draw_damage_overlay(
         st.session_state.image,
         damaged_areas
     )
     st.image(overlay, caption="Preservation damage overlay", use_container_width=True)
 
-    # Storytelling + audio
     story = res.get("storytelling", "")
     if story:
         st.markdown(f'<div class="story">{story}</div>', unsafe_allow_html=True)
@@ -251,7 +216,6 @@ if st.session_state.analysis_result:
                 height=0
             )
 
-    # Download
     st.download_button(
         "Download full analysis (JSON)",
         json.dumps(res, indent=2, ensure_ascii=False),
