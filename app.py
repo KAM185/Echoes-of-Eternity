@@ -23,7 +23,19 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────
-# Background + strong glowing golden-blue title + transparent UI
+# Page title
+# ────────────────────────────────────────────────
+st.markdown(
+    "<h1>Echoes of Eternity</h1>", 
+    unsafe_allow_html=True
+)
+st.markdown(
+    '<h3><em>Whispers of history in every stone</em></h3>', 
+    unsafe_allow_html=True
+)
+
+# ────────────────────────────────────────────────
+# Background + transparent UI + glowing title
 # ────────────────────────────────────────────────
 bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
 
@@ -35,7 +47,7 @@ st.markdown(
             background-color: #0a0e1a;
         }}
         section[data-testid="stAppViewContainer"] {{
-            background: rgba(8, 10, 22, 0.25) !important;   /* very light → maximum background visibility */
+            background: rgba(8, 10, 22, 0.25) !important;
         }}
         .block-container {{
             background: rgba(18, 22, 38, 0.32) !important;
@@ -175,9 +187,7 @@ if uploaded_file is not None:
 if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image is None):
     with st.spinner("Listening across centuries..."):
         st.session_state.analysis_result = None
-
         stream_placeholder = st.empty()
-
         full_response = ""
         for chunk in generate_analysis_stream(
             st.session_state.image,
@@ -187,7 +197,6 @@ if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image 
         ):
             full_response += chunk
             stream_placeholder.markdown(full_response + " ▌")
-
         try:
             json_str = full_response.strip()
             if json_str.startswith("```json"):
@@ -229,7 +238,7 @@ if st.session_state.analysis_result:
         if not damaged_areas:
             st.info("No significant damaged areas detected.")
 
-    overlay = draw_damage_overlay(st.session_state.image, damaged_areas)
+    overlay = draw_damage_overlay(st.session_state.image, pres.get("damaged_areas", []))
     st.image(overlay, caption="Preservation damage overlay", use_container_width=True)
 
     story = res.get("storytelling", "")
