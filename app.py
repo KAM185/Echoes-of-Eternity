@@ -22,13 +22,22 @@ st.set_page_config(
 # ---------------- GLOBAL CSS ----------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Uncial+Antiqua&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap');
 
+/* Dark overlay behind background image */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: -1;
+}
+
+/* Background image */
 html, body, [data-testid="stAppViewContainer"] {
     background: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true")
                 no-repeat center center fixed;
     background-size: cover;
-    filter: brightness(0.7);  /* darken background */
 }
 
 /* Remove Streamlit header/footer */
@@ -38,7 +47,7 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Title container */
 .title-glass {
-    background: rgba(18,22,40,0.25);
+    background: rgba(18,22,40,0.3);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 15px;
@@ -52,13 +61,12 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Shimmering golden title */
 @keyframes shimmer {
-    0% { text-shadow: 0 0 10px #ffd700, 0 0 20px #ffec99, 0 0 30px #ffd700, 0 0 40px rgba(255,215,0,0.5);}
-    50% { text-shadow: 0 0 15px #fff5a1, 0 0 25px #ffe080, 0 0 35px #ffd700, 0 0 45px rgba(255,223,0,0.7);}
-    100% { text-shadow: 0 0 10px #ffd700, 0 0 20px #ffec99, 0 0 30px #ffd700, 0 0 40px rgba(255,215,0,0.5);}
+    0%,100% { text-shadow: 0 0 15px #ffd700,0 0 25px #fff8b0,0 0 35px #ffd700,0 0 50px rgba(255,215,0,0.7);}
+    50% { text-shadow: 0 0 20px #fffacd,0 0 30px #fff8b0,0 0 40px #ffd700,0 0 55px rgba(255,215,0,0.8);}
 }
 
 .title-glass h1 {
-    font-family: 'Uncial Antiqua', 'Cinzel Decorative', serif;
+    font-family: 'Cinzel Decorative', serif;
     font-size: 5rem;
     color: #ffd700;
     animation: shimmer 2.5s infinite;
@@ -67,10 +75,10 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Subtitle */
 .title-glass p {
-    font-family: 'Cinzel Decorative', Georgia, serif;
+    font-family: Georgia, serif;
     font-size: 1.5rem;
-    color: rgba(255,223,0,0.9);
-    text-shadow: 0 0 5px rgba(255,223,0,0.5);
+    color: #fff3b8;
+    text-shadow: 0 0 8px rgba(255,243,184,0.5);
 }
 
 /* Glass container - rectangular */
@@ -225,3 +233,4 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
