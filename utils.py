@@ -1,145 +1,158 @@
 import os
-import io
 import time
 import json
-from typing import Generator, List
-
-import streamlit as st
-from PIL import Image, ImageDraw
+from typing import List, Dict
 
 import google.generativeai as genai
-
+from PIL import Image, ImageDraw
+import streamlit as st
 
 # -------------------------------------------------
-# Gemini initialization 
+# GEMINI CONFIG
 # -------------------------------------------------
 @st.cache_resource
-def init_gemini():
-    api_key = st.secrets.get("GEMINI_API_KEY")
+def init_gemini_model():
+    """
+    Initialize Gemini 3 with multiple safe fallbacks.
+    Gemini 3 is mandatory (hackathon rule).
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not found in Streamlit secrets")
+        raise RuntimeError("GEMINI_API_KEY not found in environment.")
+
     genai.configure(api_key=api_key)
 
+    # Ordered by preference
+    model_names = [
+        "gemini-3-pro-preview",
+        "gemini-3-pro-vision-preview",
+        "gemini-3-flash-preview",
+        "gemini-3-flash-vision-preview",
+        "gemini-3-pro"
+    ]
 
-# -------------------------------------------------
-# Gemini 3 model pool 
-# -------------------------------------------------
-GEMINI_3_MODELS = [
-    "gemini-3-pro-preview",
-    "gemini-3-pro-vision-preview",
-    "gemini-3.0-pro",
-    "gemini-3-flash-preview",
-    "gemini-3-flash-vision-preview",
-]
-
-
-# -------------------------------------------------
-# Streaming analysis generator
-# -------------------------------------------------
-def generate_analysis_stream(
-    image_bytes: bytes,
-    system_prompt: str,
-) -> Generator[str, None, None]:
-    """
-    Streams analysis text from Gemini 3 models.
-    Falls back safely across Gemini 3 variants.
-    Never crashes the app.
-    """
-
-    init_gemini()
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     last_error = None
-
-    for model_name in GEMINI_3_MODELS:
+    for name in model_names:
         try:
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_prompt
-            )
-
-            response = model.generate_content(
-                [image, system_prompt],
-                stream=True
-            )
-
-            for chunk in response:
-                if hasattr(chunk, "text") and chunk.text:
-                    yield chunk.text
-
-            return  # SUCCESS — stop trying models
-
+            return genai.GenerativeModel(name)
         except Exception as e:
-            last_error = f"{model_name}: {str(e)}"
-            time.sleep(1)
+            last_error = e
+            continue
 
-    # If all models fail, yield a valid JSON fallback
-    fallback = {
-        "monument_identification": {
-            "name": "unknown",
-            "confidence_score": 0.0,
-            "city": "unknown",
-            "country": "unknown",
-            "coordinates": "unknown"
-        },
-        "architectural_analysis": {
-            "style": "unknown",
-            "period_or_dynasty": "unknown",
-            "primary_materials": [],
-            "distinct_features_visible": []
-        },
-        "historical_facts": {
-            "summary": "unknown",
-            "timeline": [],
-            "mysteries_or_lesser_known_facts": []
-        },
-        "visible_damage_assessment": [],
-        "documented_conservation_issues": [],
-        "restoration_guidance": {
-            "can_be_restored": "unknown",
-            "recommended_methods": [],
-            "preventive_measures": []
-        },
-        "first_person_narrative": {
-            "story_from_monument_perspective": "The echoes are faint today."
-        }
-    }
-
-    yield json.dumps(fallback)
+    raise RuntimeError(f"Failed to initialize Gemini models: {last_error}")
 
 
 # -------------------------------------------------
-# Damage overlay drawing (clearly visible)
+# IMAGE ANALYSIS
+# -------------------------------------------------
+def generate_analysis(model, image_bytes: bytes, prompt: str) -> str:
+    """
+    Sends image + prompt to Gemini and returns raw JSON text.
+    Includes retry + backoff.
+    """
+    image = Image.open(io := bytes_to_image(image_bytes))
+
+    for attempt in range(3):
+        try:
+            response = model.generate_content(
+                [prompt, image],
+                generation_config={
+                    "temperature": 0.3,
+                    "response_mime_type": "application/json",
+                }
+            )
+            return response.text.strip()
+
+        except Exception:
+            time.sleep(2 ** attempt)
+
+    raise RuntimeError("Gemini analysis failed after retries.")
+
+
+def bytes_to_image(image_bytes: bytes):
+    from io import BytesIO
+    return BytesIO(image_bytes)
+
+
+# -------------------------------------------------
+# DAMAGE OVERLAY DRAWING
 # -------------------------------------------------
 def draw_damage_overlay(
-    image: Image.Image,
-    damages: List[dict]
+    base_image: Image.Image,
+    damages: List[Dict]
 ) -> Image.Image:
     """
-    Draws semi-transparent red boxes over damaged areas.
-    Expects normalized [x1,y1,x2,y2] coordinates.
+    Draws semi-transparent red overlays for damaged regions.
+    Uses approximate regions (text-based) safely.
     """
-
-    base = image.convert("RGBA")
-    overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
+    img = base_image.convert("RGBA")
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    width, height = base.size
+    width, height = img.size
 
-    for dmg in damages:
-        region = dmg.get("approximate_image_region")
+    for d in damages:
+        region = d.get("approximate_image_region", "").lower()
 
-        if isinstance(region, list) and len(region) == 4:
-            x1 = int(region[0] * width)
-            y1 = int(region[1] * height)
-            x2 = int(region[2] * width)
-            y2 = int(region[3] * height)
+        # Very conservative region mapping (no hallucinated bounding boxes)
+        if "left" in region:
+            box = (0, 0, width * 0.3, height)
+        elif "right" in region:
+            box = (width * 0.7, 0, width, height)
+        elif "upper" in region or "top" in region:
+            box = (0, 0, width, height * 0.3)
+        elif "lower" in region or "bottom" in region:
+            box = (0, height * 0.7, width, height)
+        else:
+            continue
 
-            draw.rectangle(
-                [x1, y1, x2, y2],
-                fill=(255, 0, 0, 90),
-                outline=(255, 60, 60, 220),
-                width=4
-            )
+        draw.rectangle(
+            box,
+            fill=(255, 0, 0, 90),
+            outline=(255, 80, 80, 160),
+            width=3,
+        )
 
-    return Image.alpha_composite(base, overlay)
+    return Image.alpha_composite(img, overlay)
 
+
+# -------------------------------------------------
+# ASK THE ECHO (CHAT)
+# -------------------------------------------------
+def chat_with_monument(
+    analysis: Dict,
+    chat_history: List[Dict],
+    user_question: str,
+    system_prompt: str,
+) -> str:
+    """
+    Chat with the monument using Gemini 3.
+    Injects analysis context + preserves memory.
+    """
+    model = init_gemini_model()
+
+    # Build context summary for the model
+    context = {
+        "name": analysis["monument_identification"]["name"],
+        "location": f"{analysis['monument_identification']['city']}, {analysis['monument_identification']['country']}",
+        "architecture": analysis["architectural_analysis"],
+        "history": analysis["historical_facts"]["summary"],
+        "condition": analysis["visible_damage_assessment"],
+    }
+
+    messages = [
+        {"role": "user", "parts": [system_prompt]},
+        {"role": "user", "parts": [f"Context about you:\n{json.dumps(context, indent=2)}"]},
+    ]
+
+    for msg in chat_history:
+        role = "user" if msg["role"] == "user" else "model"
+        messages.append({"role": role, "parts": [msg["content"]]})
+
+    messages.append({"role": "user", "parts": [user_question]})
+
+    try:
+        response = model.generate_content(messages, generation_config={"temperature": 0.4})
+        return response.text.strip()
+    except Exception:
+        return "My voice fades for a moment… ask me again."
