@@ -1,13 +1,19 @@
+import os
+import json
+import io
 import streamlit as st
 from PIL import Image
-import io
-import json
 
-from utils import generate_analysis_stream, draw_damage_overlay
-from prompts import SYSTEM_PROMPT
+from utils import (
+    init_gemini_model,
+    generate_analysis,
+    draw_damage_overlay,
+    chat_with_monument
+)
+from prompts import SYSTEM_PROMPT, ANALYSIS_PROMPT, CHAT_PROMPT
 
 # -------------------------------------------------
-# PAGE CONFIG — DARK MODE ALWAYS
+# PAGE CONFIG — DARK MODE FORCED
 # -------------------------------------------------
 st.set_page_config(
     page_title="Echoes of Eternity",
@@ -17,77 +23,57 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# HD BACKGROUND + GLASS UI + TITLE EFFECTS
+# GLOBAL STYLES (HD BG + GLASS UI)
 # -------------------------------------------------
 st.markdown(
     """
     <style>
-    /* Full-screen HD background */
     .stApp {
         background-image: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
+        color: #f0f0f0;
     }
 
-    /* Fade-in animation */
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Glass content box */
     .glass {
-        background: rgba(10, 14, 24, 0.68);
-        backdrop-filter: blur(12px);
+        background: rgba(10, 14, 28, 0.72);
+        backdrop-filter: blur(14px);
         border-radius: 22px;
         padding: 3rem;
         margin: 2.5rem auto;
         max-width: 1200px;
-        box-shadow: 0 25px 70px rgba(0,0,0,0.75);
-        border: 1px solid rgba(255,255,255,0.12);
-        animation: fadeIn 1.2s ease-out;
+        box-shadow: 0 30px 80px rgba(0,0,0,0.75);
+        border: 1px solid rgba(255,255,255,0.15);
     }
 
-    /* Title styling — eye-catching but elegant */
     h1 {
         font-family: Georgia, serif;
-        font-size: clamp(2.8rem, 6vw, 4.3rem);
+        font-size: clamp(2.8rem, 5.8vw, 4.4rem);
         text-align: center;
-        margin-bottom: 0.4rem;
-        letter-spacing: 2px;
+        letter-spacing: 3px;
         text-shadow:
-            0 0 20px rgba(255, 215, 150, 0.35),
-            0 0 40px rgba(120, 160, 255, 0.25);
+            0 0 20px rgba(255,215,150,0.35),
+            0 0 40px rgba(120,160,255,0.25);
     }
 
     .tagline {
         text-align: center;
         font-style: italic;
         opacity: 0.9;
-        margin-bottom: 2.2rem;
-    }
-
-    h2 {
-        margin-top: 2.2rem;
-        border-bottom: 1px solid rgba(255,255,255,0.18);
-        padding-bottom: 0.4rem;
-    }
-
-    ul {
-        padding-left: 1.4rem;
+        margin-bottom: 2.5rem;
     }
 
     .story {
         font-family: Georgia, serif;
-        font-size: 1.18rem;
+        font-size: 1.2rem;
         line-height: 1.9;
         background: rgba(255,255,255,0.06);
         padding: 2rem;
         border-radius: 18px;
-        margin-top: 1.8rem;
         border-left: 4px solid rgba(255,215,150,0.7);
+        margin-top: 1.5rem;
     }
     </style>
     """,
@@ -97,11 +83,9 @@ st.markdown(
 # -------------------------------------------------
 # SESSION STATE
 # -------------------------------------------------
-if "analysis" not in st.session_state:
-    st.session_state.analysis = None
-
-if "image_bytes" not in st.session_state:
-    st.session_state.image_bytes = None
+for key in ["analysis", "image_bytes", "chat_history"]:
+    if key not in st.session_state:
+        st.session_state[key] = None if key != "chat_history" else []
 
 # -------------------------------------------------
 # HERO
@@ -120,108 +104,118 @@ st.markdown(
 # IMAGE UPLOAD
 # -------------------------------------------------
 uploaded = st.file_uploader(
-    "Upload a monument image",
-    type=["jpg", "jpeg", "png"]
+    "Upload a monument image (jpg / png)",
+    type=["jpg", "jpeg", "png"],
 )
 
 if uploaded:
     st.session_state.image_bytes = uploaded.read()
-    img = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGB")
-    st.image(img, caption="Uploaded monument", use_container_width=True)
+    image = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGB")
+    st.image(image, caption="Uploaded monument", use_container_width=True)
 
     if st.button("Awaken the Echo"):
         with st.spinner("Listening across centuries…"):
-            text = ""
-            for chunk in generate_analysis_stream(
-                image_bytes=st.session_state.image_bytes,
-                system_prompt=SYSTEM_PROMPT
-            ):
-                text += chunk
-
             try:
-                st.session_state.analysis = json.loads(text)
-                st.success("The echo has awakened.")
-            except Exception:
-                st.error("The monument’s voice was unclear. Try another image.")
+                model = init_gemini_model()
+                result_text = generate_analysis(
+                    model=model,
+                    image_bytes=st.session_state.image_bytes,
+                    prompt=SYSTEM_PROMPT + ANALYSIS_PROMPT,
+                )
+                st.session_state.analysis = json.loads(result_text)
+                st.session_state.chat_history = []
+                st.success("The monument has spoken.")
+            except Exception as e:
+                st.error("Unable to interpret this monument. Try another image.")
                 st.session_state.analysis = None
 
 # -------------------------------------------------
-# RESULTS — CLEAN, CURATED PRESENTATION
+# RESULTS PRESENTATION
 # -------------------------------------------------
 res = st.session_state.analysis
 
 if res:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
-    # Identification
-    ident = res.get("monument_identification", {})
+    ident = res["monument_identification"]
     st.header("Monument Identification")
-    st.markdown(f"**Name:** {ident.get('name','unknown')}")
-    st.markdown(f"**Location:** {ident.get('city','unknown')}, {ident.get('country','unknown')}")
-    st.markdown(f"**Confidence Score:** {ident.get('confidence_score',0.0)}")
+    st.markdown(f"**Name:** {ident['name']}")
+    st.markdown(f"**Location:** {ident['city']}, {ident['country']}")
+    st.markdown(f"**Confidence Score:** {ident['confidence_score']}")
 
-    # Architecture
-    arch = res.get("architectural_analysis", {})
+    arch = res["architectural_analysis"]
     st.header("Architectural Analysis")
-    st.markdown(f"**Style:** {arch.get('style','unknown')}")
-    st.markdown(f"**Period / Dynasty:** {arch.get('period_or_dynasty','unknown')}")
-
+    st.markdown(f"**Style:** {arch['style']}")
+    st.markdown(f"**Period / Dynasty:** {arch['period_or_dynasty']}")
     st.markdown("**Primary Materials:**")
-    if arch.get("primary_materials"):
-        for m in arch["primary_materials"]:
-            st.markdown(f"- {m}")
-    else:
-        st.markdown("unknown")
+    for m in arch["primary_materials"]:
+        st.markdown(f"- {m}")
+    st.markdown("**Distinct Features:**")
+    for f in arch["distinct_features_visible"]:
+        st.markdown(f"- {f}")
 
-    st.markdown("**Notable Features:**")
-    if arch.get("distinct_features_visible"):
-        for f in arch["distinct_features_visible"]:
-            st.markdown(f"- {f}")
-    else:
-        st.markdown("unknown")
-
-    # History
-    hist = res.get("historical_facts", {})
+    hist = res["historical_facts"]
     st.header("Historical Context")
-    st.markdown(hist.get("summary","unknown"))
+    st.markdown(hist["summary"])
 
-    # Damage
+    damages = res["visible_damage_assessment"]
     st.header("Visible Damage Assessment")
-    damages = res.get("visible_damage_assessment", [])
 
     if damages:
         base = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGBA")
         overlay = draw_damage_overlay(base, damages)
-        st.image(overlay, caption="Detected damage zones", use_container_width=True)
+        st.image(overlay, caption="Detected damage regions", use_container_width=True)
 
         for d in damages:
             st.markdown(
                 f"""
-                **Damage Type:** {d.get('damage_type','unknown')}  
-                **Severity:** {d.get('severity','unknown')}  
-                **Probable Cause:** {d.get('probable_cause','unknown')}
+                **Type:** {d['damage_type']}  
+                **Severity:** {d['severity']}  
+                **Cause:** {d['probable_cause']}
                 """
             )
     else:
         st.info("No visible major damage detected.")
 
-    # Restoration
-    rest = res.get("restoration_guidance", {})
+    rest = res["restoration_guidance"]
     st.header("Restoration Guidance")
-    st.markdown(f"**Can be restored:** {rest.get('can_be_restored','unknown')}")
+    st.markdown(f"**Can be restored:** {rest['can_be_restored']}")
+    for r in rest["recommended_methods"]:
+        st.markdown(f"- {r}")
 
-    if rest.get("recommended_methods"):
-        st.markdown("**Recommended Methods:**")
-        for r in rest["recommended_methods"]:
-            st.markdown(f"- {r}")
-
-    # Story
-    story = res.get("first_person_narrative", {}).get("story_from_monument_perspective","")
+    story = res["first_person_narrative"]["story_from_monument_perspective"]
     if story:
         st.header("The Monument Speaks")
         st.markdown(f"<div class='story'>{story}</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+# -------------------------------------------------
+# ASK THE ECHO (CHAT)
+# -------------------------------------------------
+if res:
+    st.markdown("<div class='glass'>", unsafe_allow_html=True)
+    st.header("Ask the Echo")
 
+    question = st.text_input("Ask a question to the monument…")
 
+    if question:
+        with st.spinner("The monument responds…"):
+            reply = chat_with_monument(
+                analysis=res,
+                chat_history=st.session_state.chat_history,
+                user_question=question,
+                system_prompt=CHAT_PROMPT,
+            )
+            st.session_state.chat_history.append(
+                {"role": "user", "content": question}
+            )
+            st.session_state.chat_history.append(
+                {"role": "monument", "content": reply}
+            )
+
+    for msg in st.session_state.chat_history:
+        speaker = "You" if msg["role"] == "user" else "Monument"
+        st.markdown(f"**{speaker}:** {msg['content']}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
