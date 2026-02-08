@@ -34,7 +34,38 @@ html, body, [data-testid="stAppViewContainer"] {
     background: transparent;
 }
 
-/* Glass container - rectangular and transparent */
+/* Title container - fully transparent glass */
+.title-glass {
+    background: rgba(18, 22, 40, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 2rem 3rem;
+    margin: 2rem auto;
+    max-width: 1000px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+/* Ancient, imposing, elegant title */
+.title-glass h1 {
+    font-family: "Cinzel Decorative", "Cinzel", serif;
+    font-size: 5rem;
+    color: #ffd77f;
+    text-shadow: 0 0 15px #ffd77f, 0 0 25px #ffebaa, 0 0 40px rgba(255,223,127,0.8);
+    margin: 0;
+}
+
+/* Subtitle below title */
+.title-glass p {
+    font-family: Georgia, serif;
+    font-size: 1.5rem;
+    color: #fff3cc;
+    text-shadow: 0 0 10px rgba(255,243,204,0.6);
+}
+
+/* Glass container - rectangular */
 .glass {
     background: rgba(18, 22, 40, 0.25);
     backdrop-filter: blur(15px);
@@ -45,15 +76,6 @@ html, body, [data-testid="stAppViewContainer"] {
     max-width: 1200px;
     border: 1px solid rgba(255,255,255,0.15);
     box-shadow: 0 15px 50px rgba(0,0,0,0.4);
-}
-
-/* Ancient-looking title */
-h1 {
-    font-family: "Cinzel", serif;
-    font-size: 4rem;
-    text-align: center;
-    color: #f6e8c9;
-    text-shadow: 0 0 15px #ffd77f, 0 0 25px #f6e8c9;
 }
 
 /* Story block inside container */
@@ -72,6 +94,16 @@ h2, h3 {
     color: #ffeabf;
     text-shadow: 0 0 10px rgba(255,235,190,0.8);
 }
+
+/* Chat box scroll */
+.chat-container {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 1rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.05);
+    margin-bottom: 1rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,11 +117,9 @@ if "chat" not in st.session_state:
 
 # ---------------- HERO ----------------
 st.markdown("""
-<div class="glass">
+<div class="title-glass">
 <h1>Echoes of Eternity</h1>
-<p style="text-align:center; font-size:1.5rem;">
-<em>When ancient stones finally speak.</em>
-</p>
+<p><em>When ancient stones finally speak.</em></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -105,26 +135,31 @@ if file:
     st.image(image, use_container_width=True)
 
     if st.button("Awaken the Echo"):
-        with st.spinner("Listening across centuries…"):
-            model = init_gemini_model()
+        if not st.session_state.image_bytes:
+            st.error("No image uploaded. Please upload a monument image first.")
+        else:
+            with st.spinner("Listening across centuries…"):
+                model = init_gemini_model()
+                try:
+                    raw = generate_analysis(
+                        model,
+                        st.session_state.image_bytes,
+                        SYSTEM_PROMPT + ANALYSIS_PROMPT
+                    )
+                    # Safe JSON parsing
+                    try:
+                        parsed = json.loads(raw)
+                    except Exception:
+                        raw = raw.strip().split("{", 1)[-1]
+                        raw = "{" + raw
+                        parsed = json.loads(raw)
 
-            raw = generate_analysis(
-                model,
-                st.session_state.image_bytes,
-                SYSTEM_PROMPT + ANALYSIS_PROMPT
-            )
+                    st.session_state.analysis = parsed
+                    st.session_state.chat = []
 
-            # ---------- SAFE JSON PARSING ----------
-            try:
-                parsed = json.loads(raw)
-            except Exception:
-                # last-resort cleanup
-                raw = raw.strip().split("{", 1)[-1]
-                raw = "{" + raw
-                parsed = json.loads(raw)
-
-            st.session_state.analysis = parsed
-            st.session_state.chat = []
+                except Exception as e:
+                    st.error("The monument could not speak. Please try again later.")
+                    st.error(f"Debug info: {str(e)}")  # Remove in production
 
 # ---------------- RESULTS ----------------
 res = st.session_state.analysis
@@ -133,23 +168,22 @@ if res:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
     st.subheader("🗿 Monument Identification")
-    st.json(res["monument_identification"])
+    st.json(res.get("monument_identification", {}))
 
     st.subheader("🏛 Architecture")
-    st.json(res["architectural_analysis"])
+    st.json(res.get("architectural_analysis", {}))
 
     st.subheader("📜 Historical Context")
-    st.write(res["historical_facts"]["summary"])
+    st.write(res.get("historical_facts", {}).get("summary", ""))
 
     st.subheader("🛠 Preservation Condition")
-
-    damages = res["visible_damage_assessment"]
+    damages = res.get("visible_damage_assessment", [])
     overlay = draw_damage_overlay(image, damages)
     st.image(overlay, use_container_width=True)
 
     st.subheader("🗣 The Monument Speaks")
     st.markdown(
-        f"<div class='story'>{res['first_person_narrative']['story_from_monument_perspective']}</div>",
+        f"<div class='story'>{res.get('first_person_narrative', {}).get('story_from_monument_perspective', '')}</div>",
         unsafe_allow_html=True
     )
 
@@ -163,17 +197,24 @@ if res:
     q = st.text_input("Ask the monument a question…")
 
     if q:
-        reply = chat_with_monument(
-            res,
-            st.session_state.chat,
-            q,
-            CHAT_PROMPT
-        )
-        st.session_state.chat.append({"role": "user", "content": q})
-        st.session_state.chat.append({"role": "monument", "content": reply})
+        try:
+            reply = chat_with_monument(
+                res,
+                st.session_state.chat,
+                q,
+                CHAT_PROMPT
+            )
+            st.session_state.chat.append({"role": "user", "content": q})
+            st.session_state.chat.append({"role": "monument", "content": reply})
+        except Exception as e:
+            st.error("The echo could not respond. Try again later.")
+            st.error(f"Debug info: {str(e)}")  # remove in production
 
+    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     for m in st.session_state.chat:
         speaker = "You" if m["role"] == "user" else "Monument"
         st.markdown(f"**{speaker}:** {m['content']}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
