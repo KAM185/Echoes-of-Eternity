@@ -4,7 +4,7 @@ import streamlit as st
 from PIL import Image
 
 from utils import (
-    init_gemini_model,
+    init_gemini_models,
     generate_analysis,
     draw_damage_overlay,
     chat_with_monument
@@ -68,7 +68,7 @@ html, body, [data-testid="stAppViewContainer"] {
 .title-glass h1 {
     font-family: 'Cinzel Decorative', serif;
     font-size: 5rem;
-    color: #c0c0c0;  /* soft grey */
+    color: #c0c0c0;
     animation: shimmer 3s infinite;
     margin: 0;
 }
@@ -145,6 +145,9 @@ file = st.file_uploader(
     type=["jpg", "jpeg", "png"]
 )
 
+# Initialize all 8 Gemini models once
+models = init_gemini_models()
+
 if file:
     st.session_state.image_bytes = file.read()
     image = Image.open(io.BytesIO(st.session_state.image_bytes)).convert("RGB")
@@ -155,27 +158,13 @@ if file:
             st.error("No image uploaded. Please upload a monument image first.")
         else:
             with st.spinner("Listening across centuries…"):
-                model = init_gemini_model()
                 try:
-                    raw = generate_analysis(
-                        model,
-                        st.session_state.image_bytes,
-                        SYSTEM_PROMPT + ANALYSIS_PROMPT
-                    )
-                    # Safe JSON parsing
-                    try:
-                        parsed = json.loads(raw)
-                    except Exception:
-                        raw = raw.strip().split("{", 1)[-1]
-                        raw = "{" + raw
-                        parsed = json.loads(raw)
-
-                    st.session_state.analysis = parsed
+                    analysis = generate_analysis(models, st.session_state.image_bytes, SYSTEM_PROMPT + ANALYSIS_PROMPT)
+                    st.session_state.analysis = analysis
                     st.session_state.chat = []
-
                 except Exception as e:
                     st.error("The monument could not speak. Please try again later.")
-                    st.error(f"Debug info: {str(e)}")  # remove in production
+                    st.error(f"Debug info: {str(e)}")  # useful for hackathon
 
 # ---------------- RESULTS ----------------
 res = st.session_state.analysis
@@ -224,7 +213,7 @@ if res:
             st.session_state.chat.append({"role": "monument", "content": reply})
         except Exception as e:
             st.error("The echo could not respond. Try again later.")
-            st.error(f"Debug info: {str(e)}")  # remove in production
+            st.error(f"Debug info: {str(e)}")  # useful for hackathon
 
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     for m in st.session_state.chat:
@@ -233,3 +222,4 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
