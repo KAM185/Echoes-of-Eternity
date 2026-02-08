@@ -22,11 +22,12 @@ st.set_page_config(
 # ---------------- GLOBAL CSS ----------------
 st.markdown("""
 <style>
-/* Page background */
+/* Page background - slightly darker */
 html, body, [data-testid="stAppViewContainer"] {
     background: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true")
                 no-repeat center center fixed;
     background-size: cover;
+    filter: brightness(0.75);  /* darken the background slightly */
 }
 
 /* Remove Streamlit default header/footer */
@@ -36,37 +37,37 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Title container - fully transparent glass */
 .title-glass {
-    background: rgba(18, 22, 40, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 12px;
+    background: rgba(18, 22, 40, 0.25);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 15px;
     padding: 2rem 3rem;
     margin: 2rem auto;
     max-width: 1000px;
-    border: 1px solid rgba(255,255,255,0.1);
-    box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,215,0,0.15);
+    box-shadow: 0 15px 50px rgba(0,0,0,0.4);
     text-align: center;
 }
 
-/* Ancient, imposing, elegant shimmering light purple title */
+/* Ancient, imposing, golden title */
 .title-glass h1 {
-    font-family: "Cinzel Decorative", "Cinzel", serif;
+    font-family: "Uncial Antiqua", "Cinzel Decorative", "Cinzel", serif;  /* ancient fonts */
     font-size: 5rem;
-    color: #d9bfff;  /* soft light purple */
+    color: #ffd700;  /* gold */
     text-shadow: 
-        0 0 5px #e0c3ff,
-        0 0 15px #cfa1ff,
-        0 0 25px #d9bfff,
-        0 0 35px rgba(217,191,255,0.5);
+        0 0 10px #ffd700,
+        0 0 20px #ffec99,
+        0 0 30px #ffd700,
+        0 0 40px rgba(255,215,0,0.5);
     margin: 0;
 }
 
 /* Subtitle below title */
 .title-glass p {
-    font-family: Georgia, serif;
+    font-family: "Cardo", Georgia, serif;
     font-size: 1.5rem;
-    color: rgba(217,191,255,0.85);
-    text-shadow: 0 0 5px rgba(217,191,255,0.4);
+    color: rgba(255,223,0,0.85);
+    text-shadow: 0 0 5px rgba(255,223,0,0.4);
 }
 
 /* Glass container - rectangular */
@@ -78,7 +79,7 @@ html, body, [data-testid="stAppViewContainer"] {
     padding: 2rem 3rem;
     margin: 2rem auto;
     max-width: 1200px;
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,215,0,0.15);
     box-shadow: 0 15px 50px rgba(0,0,0,0.4);
 }
 
@@ -93,10 +94,10 @@ html, body, [data-testid="stAppViewContainer"] {
     box-shadow: inset 0 0 20px rgba(255,255,255,0.07);
 }
 
-/* Subtitles for sections */
+/* Section subtitles */
 h2, h3 {
-    color: #d9bfff;  /* match shimmering purple theme */
-    text-shadow: 0 0 10px rgba(217,191,255,0.6);
+    color: #ffd700;  /* gold */
+    text-shadow: 0 0 10px rgba(255,215,0,0.6);
 }
 
 /* Chat box scroll */
@@ -221,3 +222,4 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
