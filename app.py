@@ -48,12 +48,16 @@ html, body, [data-testid="stAppViewContainer"] {
     text-align: center;
 }
 
-/* Ancient, imposing, elegant title */
+/* Ancient, imposing, elegant shimmering light purple title */
 .title-glass h1 {
     font-family: "Cinzel Decorative", "Cinzel", serif;
     font-size: 5rem;
-    color: #ffd77f;
-    text-shadow: 0 0 15px #ffd77f, 0 0 25px #ffebaa, 0 0 40px rgba(255,223,127,0.8);
+    color: #d9bfff;  /* soft light purple */
+    text-shadow: 
+        0 0 5px #e0c3ff,
+        0 0 15px #cfa1ff,
+        0 0 25px #d9bfff,
+        0 0 35px rgba(217,191,255,0.5);
     margin: 0;
 }
 
@@ -61,8 +65,8 @@ html, body, [data-testid="stAppViewContainer"] {
 .title-glass p {
     font-family: Georgia, serif;
     font-size: 1.5rem;
-    color: #fff3cc;
-    text-shadow: 0 0 10px rgba(255,243,204,0.6);
+    color: rgba(217,191,255,0.85);
+    text-shadow: 0 0 5px rgba(217,191,255,0.4);
 }
 
 /* Glass container - rectangular */
@@ -91,8 +95,8 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Subtitles for sections */
 h2, h3 {
-    color: #ffeabf;
-    text-shadow: 0 0 10px rgba(255,235,190,0.8);
+    color: #d9bfff;  /* match shimmering purple theme */
+    text-shadow: 0 0 10px rgba(217,191,255,0.6);
 }
 
 /* Chat box scroll */
@@ -217,4 +221,3 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
