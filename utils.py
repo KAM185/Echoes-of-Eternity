@@ -1,80 +1,77 @@
 import json
 import time
-import streamlit as st
-from openai import OpenAI
+from google.ai import generative
+from google.ai.generative_v1beta import types
 
-# ---------------- Initialize client and 8 models ----------------
-def init_gemini_models():
+# ---------------- Initialize Gemini client ----------------
+def init_gemini_client():
     """
-    Initialize OpenAI client with GEMINI_API_KEY from Streamlit secrets.
-    Returns client and list of 8 Gemini model names.
+    Initialize Google Gemini client.
+    GOOGLE_APPLICATION_CREDENTIALS env var must point to your service account JSON.
     """
-    api_key = st.secrets["GEMINI_API_KEY"]
-    client = OpenAI(api_key=api_key)
+    client = generative.TextServiceClient()
+    return client
 
-    models = [
-        "gemini-3-pro-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-preview-09-2025",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-2.5-flash-lite"
-    ]
-    return client, models
+# ---------------- Available Gemini Models ----------------
+GEMINI_MODELS = [
+    "gemini-3",
+    "gemini-3-preview",
+    "gemini-2.5",
+    "gemini-2.5-preview",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0",
+    "gemini-2.0-lite"
+]
 
 # ---------------- Generate Analysis ----------------
-def generate_analysis(client, models, prompt: str, max_retries: int = 2):
+def generate_analysis(client, prompt: str, max_retries: int = 2):
     """
-    Tries 8 Gemini models in order with retries.
-    Returns JSON-parsed result from first successful model.
+    Try 8 Gemini models in order. Retry each model up to max_retries.
+    Returns first successful JSON response.
     """
     last_exception = None
 
-    for model_name in models:
+    for model_name in GEMINI_MODELS:
         for attempt in range(max_retries):
             try:
-                resp = client.chat.completions.create(
+                response = client.generate_text(
                     model=model_name,
-                    messages=[
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": "<image uploaded>"}
-                    ]
+                    prompt=prompt,
+                    temperature=0.7,
+                    max_output_tokens=1024
                 )
-                raw = resp.choices[0].message["content"]
+                raw = response.text
 
-                # Try parsing JSON
                 try:
                     return json.loads(raw)
                 except Exception:
-                    # Last-resort cleanup
+                    # last-resort cleanup for partial JSON
                     cleaned = raw.strip().split("{",1)[-1]
                     cleaned = "{" + cleaned
                     return json.loads(cleaned)
 
             except Exception as e:
                 last_exception = e
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-                    continue
-                break  # Try next model
+                time.sleep(1)
+                continue
+        # If this model fails after retries, try next
+        print(f"Model {model_name} failed after {max_retries} retries: {last_exception}")
 
-    raise RuntimeError(f"All Gemini models failed after retries. Last error: {last_exception}")
+    raise RuntimeError(f"All Gemini models failed. Last error: {last_exception}")
 
 # ---------------- Draw Damage Overlay ----------------
 def draw_damage_overlay(image, damages):
-    """
-    Simple placeholder function to return original image.
-    """
+    # Placeholder - just return the original image
     return image.copy()
 
 # ---------------- Chat With Monument ----------------
 def chat_with_monument(analysis, chat_history, question, chat_prompt):
     """
-    Ask the monument a follow-up question.
+    Ask follow-up question to monument using same Gemini models fallback.
     """
-    client, models = init_gemini_models()
+    client = init_gemini_client()
     prompt = chat_prompt + "\n" + question
-    result = generate_analysis(client, models, prompt)
+    result = generate_analysis(client, prompt)
     return result.get("reply", "The monument remains silent.")
+
