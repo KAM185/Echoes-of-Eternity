@@ -1,14 +1,9 @@
-import io
-import time
 import json
-from PIL import Image
+import time
 from openai import OpenAI
 
 # ---------------- Initialize 8 Gemini models ----------------
 def init_gemini_models(api_key: str):
-    """
-    Returns OpenAI client and list of 8 Gemini models.
-    """
     client = OpenAI(api_key=api_key)
     models = [
         "gemini-3-pro-preview",
@@ -22,17 +17,8 @@ def init_gemini_models(api_key: str):
     ]
     return client, models
 
-# ---------------- Resize Image ----------------
-def resize_image(image_bytes: bytes, max_dim: int = 1024) -> bytes:
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image.thumbnail((max_dim, max_dim))
-    buf = io.BytesIO()
-    image.save(buf, format="JPEG")
-    return buf.getvalue()
-
 # ---------------- Generate Analysis ----------------
-def generate_analysis(client, models, image_bytes: bytes, prompt: str, max_retries: int = 2):
-    image_bytes = resize_image(image_bytes)
+def generate_analysis(client, models, prompt: str, max_retries: int = 2):
     last_exception = None
 
     for model_name in models:
@@ -42,22 +28,20 @@ def generate_analysis(client, models, image_bytes: bytes, prompt: str, max_retri
                     model=model_name,
                     messages=[
                         {"role": "system", "content": prompt},
-                        {"role": "user", "content": "<image>"}
-                    ],
-                    modalities=["text", "image"],
-                    image={"bytes": image_bytes}
+                        {"role": "user", "content": "<image uploaded>"}
+                    ]
                 )
                 raw = resp.choices[0].message["content"]
                 try:
                     return json.loads(raw)
                 except Exception:
-                    cleaned = raw.strip().split("{", 1)[-1]
+                    # last-resort cleanup
+                    cleaned = raw.strip().split("{",1)[-1]
                     cleaned = "{" + cleaned
                     return json.loads(cleaned)
             except Exception as e:
                 last_exception = e
                 if attempt < max_retries - 1:
-                    time.sleep(1)
                     continue
                 print(f"Model {model_name} attempt {attempt+1} failed: {e}")
                 break
@@ -65,15 +49,12 @@ def generate_analysis(client, models, image_bytes: bytes, prompt: str, max_retri
     raise RuntimeError(f"All Gemini models failed after retries. Last error: {last_exception}")
 
 # ---------------- Draw Damage Overlay ----------------
-def draw_damage_overlay(image: Image.Image, damages):
-    overlay = image.copy()
-    # Add drawing code if needed
-    return overlay
+def draw_damage_overlay(image, damages):
+    return image.copy()  # simple placeholder
 
-# ---------------- Chat With Monument ----------------
+# ---------------- Chat with Monument ----------------
 def chat_with_monument(analysis, chat_history, question, chat_prompt):
-    # For simplicity, reuse Gemini ensemble for chat
     client, models = init_gemini_models("<YOUR_API_KEY_HERE>")
     prompt = chat_prompt + "\n" + question
-    result = generate_analysis(client, models, b"", prompt)
+    result = generate_analysis(client, models, prompt)
     return result.get("reply", "The monument remains silent.")
