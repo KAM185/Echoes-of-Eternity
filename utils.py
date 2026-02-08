@@ -17,19 +17,22 @@ import google.generativeai as genai
 def init_gemini():
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not found in Streamlit secrets")
+        raise RuntimeError("GEMINI_API_KEY not found in Streamlit secrets. Please add it to .streamlit/secrets.toml.")
     genai.configure(api_key=api_key)
 
 
 # -------------------------------------------------
-# Gemini 3 model pool 
+# Gemini model pool (prioritize Gemini 3 variants first, then fallbacks)
 # -------------------------------------------------
-GEMINI_3_MODELS = [
+GEMINI_MODELS = [
     "gemini-3-pro-preview",
     "gemini-3-pro-vision-preview",
     "gemini-3.0-pro",
     "gemini-3-flash-preview",
     "gemini-3-flash-vision-preview",
+    "gemini-1.5-pro",  # Fallback
+    "gemini-1.5-flash",  # Fallback
+    "gemini-1.0-pro",  # Older fallback
 ]
 
 
@@ -41,16 +44,20 @@ def generate_analysis_stream(
     system_prompt: str,
 ) -> Generator[str, None, None]:
     """
-    Streams analysis text from Gemini 3 models.
-    Falls back safely across Gemini 3 variants.
+    Streams analysis text from Gemini models.
+    Falls back safely across variants.
     Never crashes the app.
     """
+    try:
+        init_gemini()
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as e:
+        st.error(f"Invalid image: {str(e)}. Please upload a valid JPG/PNG.")
+        return
 
-    init_gemini()
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     last_error = None
 
-    for model_name in GEMINI_3_MODELS:
+    for model_name in GEMINI_MODELS:
         try:
             model = genai.GenerativeModel(
                 model_name=model_name,
@@ -58,7 +65,7 @@ def generate_analysis_stream(
             )
 
             response = model.generate_content(
-                [image, system_prompt],
+                [image, "Analyze this monument image and return JSON as specified."],
                 stream=True
             )
 
@@ -70,9 +77,11 @@ def generate_analysis_stream(
 
         except Exception as e:
             last_error = f"{model_name}: {str(e)}"
+            st.warning(f"Model {model_name} failed: {str(e)}. Trying next...")
             time.sleep(1)
 
     # If all models fail, yield a valid JSON fallback
+    st.error("All AI models failed. Using fallback analysis.")
     fallback = {
         "monument_identification": {
             "name": "unknown",
@@ -92,12 +101,20 @@ def generate_analysis_stream(
             "timeline": [],
             "mysteries_or_lesser_known_facts": []
         },
-        "visible_damage_assessment": [],
+        "visible_damage_assessment": [
+            {
+                "damage_type": "none observed",
+                "description": "no visible damage observed",
+                "probable_cause": "n/a",
+                "severity": "low",
+                "approximate_image_region": ""
+            }
+        ],
         "documented_conservation_issues": [],
         "restoration_guidance": {
             "can_be_restored": "unknown",
             "recommended_methods": [],
-            "preventive_measures": []
+            "preventive_measures": ["Regular monitoring and environmental controls."]
         },
         "first_person_narrative": {
             "story_from_monument_perspective": "The echoes are faint today."
@@ -116,9 +133,8 @@ def draw_damage_overlay(
 ) -> Image.Image:
     """
     Draws semi-transparent red boxes over damaged areas.
-    Expects normalized [x1,y1,x2,y2] coordinates.
+    Supports normalized [x1,y1,x2,y2] lists or "x1,y1,x2,y2" strings.
     """
-
     base = image.convert("RGBA")
     overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
@@ -126,13 +142,26 @@ def draw_damage_overlay(
     width, height = base.size
 
     for dmg in damages:
-        region = dmg.get("approximate_image_region")
+        region = dmg.get("approximate_image_region", "")
+        coords = None
 
+        # Parse list format
         if isinstance(region, list) and len(region) == 4:
-            x1 = int(region[0] * width)
-            y1 = int(region[1] * height)
-            x2 = int(region[2] * width)
-            y2 = int(region[3] * height)
+            coords = [float(c) for c in region]
+        # Parse string format (e.g., "0.1,0.2,0.8,0.9")
+        elif isinstance(region, str) and region:
+            try:
+                coords = [float(c.strip()) for c in region.split(",")]
+                if len(coords) != 4:
+                    coords = None
+            except ValueError:
+                coords = None
+
+        if coords:
+            x1 = int(coords[0] * width)
+            y1 = int(coords[1] * height)
+            x2 = int(coords[2] * width)
+            y2 = int(coords[3] * height)
 
             draw.rectangle(
                 [x1, y1, x2, y2],
