@@ -17,57 +17,77 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# BACKGROUND + GLASS PANEL
+# HD BACKGROUND + GLASS UI + TITLE EFFECTS
 # -------------------------------------------------
 st.markdown(
     """
     <style>
+    /* Full-screen HD background */
     .stApp {
-        background-image: url("https://images.unsplash.com/photo-1604079628040-94301bb21b91");
+        background-image: url("https://github.com/KAM185/Echoes-of-Eternity/blob/main/bg_final.jpg?raw=true");
         background-size: cover;
         background-position: center;
+        background-repeat: no-repeat;
         background-attachment: fixed;
     }
 
-    .glass {
-        background: rgba(18, 22, 35, 0.72);
-        backdrop-filter: blur(14px);
-        border-radius: 20px;
-        padding: 2.5rem;
-        margin: 2rem auto;
-        max-width: 1200px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.65);
+    /* Fade-in animation */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 
+    /* Glass content box */
+    .glass {
+        background: rgba(10, 14, 24, 0.68);
+        backdrop-filter: blur(12px);
+        border-radius: 22px;
+        padding: 3rem;
+        margin: 2.5rem auto;
+        max-width: 1200px;
+        box-shadow: 0 25px 70px rgba(0,0,0,0.75);
+        border: 1px solid rgba(255,255,255,0.12);
+        animation: fadeIn 1.2s ease-out;
+    }
+
+    /* Title styling — eye-catching but elegant */
     h1 {
         font-family: Georgia, serif;
-        font-size: 4rem;
+        font-size: clamp(2.8rem, 6vw, 4.3rem);
         text-align: center;
+        margin-bottom: 0.4rem;
+        letter-spacing: 2px;
+        text-shadow:
+            0 0 20px rgba(255, 215, 150, 0.35),
+            0 0 40px rgba(120, 160, 255, 0.25);
+    }
+
+    .tagline {
+        text-align: center;
+        font-style: italic;
+        opacity: 0.9;
+        margin-bottom: 2.2rem;
     }
 
     h2 {
-        margin-top: 2rem;
-        border-bottom: 1px solid rgba(255,255,255,0.15);
+        margin-top: 2.2rem;
+        border-bottom: 1px solid rgba(255,255,255,0.18);
         padding-bottom: 0.4rem;
     }
 
-    .label {
-        font-weight: 600;
-        color: #e8d8b0;
-    }
-
     ul {
-        padding-left: 1.2rem;
+        padding-left: 1.4rem;
     }
 
     .story {
         font-family: Georgia, serif;
-        font-size: 1.15rem;
+        font-size: 1.18rem;
         line-height: 1.9;
-        background: rgba(255,255,255,0.05);
-        padding: 1.8rem;
-        border-radius: 16px;
-        margin-top: 1.5rem;
+        background: rgba(255,255,255,0.06);
+        padding: 2rem;
+        border-radius: 18px;
+        margin-top: 1.8rem;
+        border-left: 4px solid rgba(255,215,150,0.7);
     }
     </style>
     """,
@@ -90,16 +110,14 @@ st.markdown(
     """
     <div class="glass">
         <h1>Echoes of Eternity</h1>
-        <p style="text-align:center; font-style:italic;">
-            When ancient stones finally speak.
-        </p>
+        <p class="tagline">When ancient stones finally speak.</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # -------------------------------------------------
-# UPLOAD
+# IMAGE UPLOAD
 # -------------------------------------------------
 uploaded = st.file_uploader(
     "Upload a monument image",
@@ -124,53 +142,50 @@ if uploaded:
                 st.session_state.analysis = json.loads(text)
                 st.success("The echo has awakened.")
             except Exception:
-                st.error("The monument’s voice was unclear. Please try another image.")
+                st.error("The monument’s voice was unclear. Try another image.")
                 st.session_state.analysis = None
 
 # -------------------------------------------------
-# RESULTS — BEAUTIFUL FORMAT
+# RESULTS — CLEAN, CURATED PRESENTATION
 # -------------------------------------------------
 res = st.session_state.analysis
 
 if res:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
-    # ---------------- Identification ----------------
+    # Identification
     ident = res.get("monument_identification", {})
     st.header("Monument Identification")
-    st.markdown(f"**Name:** {ident.get('name', 'unknown')}")
-    st.markdown(f"**Location:** {ident.get('city', 'unknown')}, {ident.get('country', 'unknown')}")
-    st.markdown(f"**Confidence Score:** {ident.get('confidence_score', 0.0)}")
+    st.markdown(f"**Name:** {ident.get('name','unknown')}")
+    st.markdown(f"**Location:** {ident.get('city','unknown')}, {ident.get('country','unknown')}")
+    st.markdown(f"**Confidence Score:** {ident.get('confidence_score',0.0)}")
 
-    # ---------------- Architecture ----------------
+    # Architecture
     arch = res.get("architectural_analysis", {})
     st.header("Architectural Analysis")
+    st.markdown(f"**Style:** {arch.get('style','unknown')}")
+    st.markdown(f"**Period / Dynasty:** {arch.get('period_or_dynasty','unknown')}")
 
-    st.markdown(f"**Style:** {arch.get('style', 'unknown')}")
-    st.markdown(f"**Period / Dynasty:** {arch.get('period_or_dynasty', 'unknown')}")
     st.markdown("**Primary Materials:**")
-    st.markdown(
-        "- " + "\n- ".join(arch.get("primary_materials", []))
-        if arch.get("primary_materials") else "unknown"
-    )
+    if arch.get("primary_materials"):
+        for m in arch["primary_materials"]:
+            st.markdown(f"- {m}")
+    else:
+        st.markdown("unknown")
 
-    st.markdown("**Notable Visible Features:**")
-    st.markdown(
-        "- " + "\n- ".join(arch.get("distinct_features_visible", []))
-        if arch.get("distinct_features_visible") else "unknown"
-    )
+    st.markdown("**Notable Features:**")
+    if arch.get("distinct_features_visible"):
+        for f in arch["distinct_features_visible"]:
+            st.markdown(f"- {f}")
+    else:
+        st.markdown("unknown")
 
-    # ---------------- History ----------------
+    # History
     hist = res.get("historical_facts", {})
     st.header("Historical Context")
-    st.markdown(hist.get("summary", "unknown"))
+    st.markdown(hist.get("summary","unknown"))
 
-    if hist.get("timeline"):
-        st.markdown("**Timeline:**")
-        for t in hist["timeline"]:
-            st.markdown(f"- {t}")
-
-    # ---------------- Damage ----------------
+    # Damage
     st.header("Visible Damage Assessment")
     damages = res.get("visible_damage_assessment", [])
 
@@ -182,37 +197,31 @@ if res:
         for d in damages:
             st.markdown(
                 f"""
-                **Damage Type:** {d.get("damage_type","unknown")}  
-                **Severity:** {d.get("severity","unknown")}  
-                **Cause:** {d.get("probable_cause","unknown")}
+                **Damage Type:** {d.get('damage_type','unknown')}  
+                **Severity:** {d.get('severity','unknown')}  
+                **Probable Cause:** {d.get('probable_cause','unknown')}
                 """
             )
     else:
         st.info("No visible major damage detected.")
 
-    # ---------------- Conservation ----------------
-    st.header("Conservation Issues")
-    for issue in res.get("documented_conservation_issues", []):
-        st.markdown(
-            f"- **{issue.get('issue','unknown')}** — {issue.get('historical_or_environmental_reason','')}"
-        )
-
-    # ---------------- Restoration ----------------
+    # Restoration
     rest = res.get("restoration_guidance", {})
     st.header("Restoration Guidance")
     st.markdown(f"**Can be restored:** {rest.get('can_be_restored','unknown')}")
-    st.markdown("**Recommended Methods:**")
-    st.markdown(
-        "- " + "\n- ".join(rest.get("recommended_methods", []))
-        if rest.get("recommended_methods") else "unknown"
-    )
 
-    # ---------------- Story ----------------
-    story = res.get("first_person_narrative", {}).get("story_from_monument_perspective", "")
+    if rest.get("recommended_methods"):
+        st.markdown("**Recommended Methods:**")
+        for r in rest["recommended_methods"]:
+            st.markdown(f"- {r}")
+
+    # Story
+    story = res.get("first_person_narrative", {}).get("story_from_monument_perspective","")
     if story:
         st.header("The Monument Speaks")
         st.markdown(f"<div class='story'>{story}</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 
