@@ -111,7 +111,7 @@ st.markdown("""
 
 # ---------------- UPLOADER ----------------
 file = st.file_uploader("Upload or capture a monument image", type=["jpg","jpeg","png"])
-client, models = init_gemini_models()
+client, models = init_gemini_models()  # uses GEMINI_API_KEY from secrets
 
 if file:
     st.session_state.image_bytes = file.read()
