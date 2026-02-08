@@ -145,8 +145,8 @@ file = st.file_uploader(
     type=["jpg", "jpeg", "png"]
 )
 
-# Initialize all 8 Gemini models once
-models = init_gemini_models()
+# Init Gemini client + 8 models
+client, models = init_gemini_models(st.secrets["GEMINI_API_KEY"])
 
 if file:
     st.session_state.image_bytes = file.read()
@@ -155,16 +155,21 @@ if file:
 
     if st.button("Awaken the Echo"):
         if not st.session_state.image_bytes:
-            st.error("No image uploaded. Please upload a monument image first.")
+            st.error("Please upload an image first!")
         else:
             with st.spinner("Listening across centuries…"):
                 try:
-                    analysis = generate_analysis(models, st.session_state.image_bytes, SYSTEM_PROMPT + ANALYSIS_PROMPT)
+                    analysis = generate_analysis(
+                        client,
+                        models,
+                        st.session_state.image_bytes,
+                        SYSTEM_PROMPT + ANALYSIS_PROMPT
+                    )
                     st.session_state.analysis = analysis
                     st.session_state.chat = []
                 except Exception as e:
-                    st.error("The monument could not speak. Please try again later.")
-                    st.error(f"Debug info: {str(e)}")  # useful for hackathon
+                    st.error("The monument could not speak. Try again later.")
+                    st.error(f"Debug info: {str(e)}")
 
 # ---------------- RESULTS ----------------
 res = st.session_state.analysis
@@ -212,8 +217,8 @@ if res:
             st.session_state.chat.append({"role": "user", "content": q})
             st.session_state.chat.append({"role": "monument", "content": reply})
         except Exception as e:
-            st.error("The echo could not respond. Try again later.")
-            st.error(f"Debug info: {str(e)}")  # useful for hackathon
+            st.error("Echo failed. Try again later.")
+            st.error(f"{str(e)}")
 
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     for m in st.session_state.chat:
@@ -222,4 +227,3 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
