@@ -54,22 +54,22 @@ html, body, [data-testid="stAppViewContainer"] {
     padding: 2rem 3rem;
     margin: 2rem auto;
     max-width: 1000px;
-    border: 1px solid rgba(255,215,0,0.15);
+    border: 1px solid rgba(192,192,192,0.15);
     box-shadow: 0 15px 50px rgba(0,0,0,0.4);
     text-align: center;
 }
 
-/* Shimmering golden title */
+/* Soft grey shimmering title */
 @keyframes shimmer {
-    0%,100% { text-shadow: 0 0 15px #ffd700,0 0 25px #fff8b0,0 0 35px #ffd700,0 0 50px rgba(255,215,0,0.7);}
-    50% { text-shadow: 0 0 20px #fffacd,0 0 30px #fff8b0,0 0 40px #ffd700,0 0 55px rgba(255,215,0,0.8);}
+    0%,100% { text-shadow: 0 0 5px #c0c0c0, 0 0 10px #d0d0d0, 0 0 15px #c0c0c0;}
+    50% { text-shadow: 0 0 7px #d0d0d0, 0 0 12px #c8c8c8, 0 0 17px #c0c0c0;}
 }
 
 .title-glass h1 {
     font-family: 'Cinzel Decorative', serif;
     font-size: 5rem;
-    color: #ffd700;
-    animation: shimmer 2.5s infinite;
+    color: #c0c0c0;  /* soft grey */
+    animation: shimmer 3s infinite;
     margin: 0;
 }
 
@@ -77,8 +77,8 @@ html, body, [data-testid="stAppViewContainer"] {
 .title-glass p {
     font-family: Georgia, serif;
     font-size: 1.5rem;
-    color: #fff3b8;
-    text-shadow: 0 0 8px rgba(255,243,184,0.5);
+    color: #d0d0d0;
+    text-shadow: 0 0 4px rgba(208,208,208,0.5);
 }
 
 /* Glass container - rectangular */
@@ -90,7 +90,7 @@ html, body, [data-testid="stAppViewContainer"] {
     padding: 2rem 3rem;
     margin: 2rem auto;
     max-width: 1200px;
-    border: 1px solid rgba(255,215,0,0.15);
+    border: 1px solid rgba(192,192,192,0.15);
     box-shadow: 0 15px 50px rgba(0,0,0,0.4);
 }
 
@@ -107,8 +107,8 @@ html, body, [data-testid="stAppViewContainer"] {
 
 /* Section subtitles */
 h2, h3 {
-    color: #ffd700;
-    text-shadow: 0 0 10px rgba(255,215,0,0.6);
+    color: #c0c0c0;
+    text-shadow: 0 0 6px rgba(192,192,192,0.5);
 }
 
 /* Chat scroll */
@@ -233,4 +233,3 @@ if res:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
