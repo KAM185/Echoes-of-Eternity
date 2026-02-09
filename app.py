@@ -58,6 +58,7 @@ st.markdown(
             border: 1px solid rgba(190, 160, 255, 0.20);
         }}
 
+        /* Strong mysterious golden-blue glowing title */
         h1 {{
             font-family: 'Georgia', serif;
             font-size: 5rem !important;
@@ -66,6 +67,7 @@ st.markdown(
             background: linear-gradient(90deg, #0f1c3a, #1e3a5f, #2a4e7a, #3a6aa6, #4a82c6, #6a9ae6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
             background-size: 400% 400%;
             animation: gradientFlow 10s ease infinite;
             text-shadow:
@@ -75,23 +77,74 @@ st.markdown(
                 0 0 140px #ffdb8a,
                 0 0 200px #ffd07a;
             letter-spacing: 5px;
+            margin: 0.5rem 0 1.2rem 0;
+            filter: drop-shadow(0 0 45px rgba(190, 160, 255, 0.9));
         }}
-
         @keyframes gradientFlow {{
             0% {{ background-position: 0% 50%; }}
             50% {{ background-position: 100% 50%; }}
             100% {{ background-position: 0% 50%; }}
         }}
+        h3 em {{
+            font-size: 2rem;
+            color: #d4b37a !important;
+            text-align: center;
+            display: block;
+            opacity: 0.92;
+            text-shadow: 0 2px 15px #000;
+        }}
 
+        /* Fully transparent/glass elements */
+        .stFileUploader [data-testid="stFileUploaderDropzone"] {{
+            background: rgba(25, 30, 50, 0.25) !important;
+            border: 2px dashed #a78bfa !important;
+            border-radius: 20px;
+            min-height: 180px;
+            backdrop-filter: blur(10px);
+        }}
+        .stExpander {{
+            background: rgba(25, 30, 50, 0.30) !important;
+            border: 1px solid rgba(190, 160, 255, 0.30) !important;
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            margin: 1.5rem 0;
+        }}
+        .stTextInput > div > div {{
+            background: rgba(25, 30, 50, 0.30) !important;
+            border: 1px solid rgba(190, 160, 255, 0.35) !important;
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            color: #e0d8c0 !important;
+        }}
+        .stButton > button {{
+            background: linear-gradient(90deg, #1e5799, #3a6aa6, #5a8ac6) !important;
+            color: white !important;
+            border: none !important;
+            font-weight: 600;
+            box-shadow: 0 6px 25px rgba(58, 106, 166, 0.5) !important;
+            transition: all 0.3s;
+        }}
+        .stButton > button:hover {{
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(58, 106, 166, 0.8) !important;
+        }}
+
+        /* Text readability */
+        p, div, span, li, label {{
+            color: #e0d8c0 !important;
+            text-shadow: 0 1px 8px rgba(0,0,0,0.85) !important;
+        }}
         .story {{
             background: rgba(25, 30, 50, 0.40) !important;
             border: 1px solid rgba(190, 160, 255, 0.40);
             box-shadow: 0 0 50px rgba(190, 160, 255, 0.25);
+            color: #f0e8d0 !important;
             padding: 2.5rem;
             border-radius: 20px;
             font-size: 1.25em;
             line-height: 1.9;
             margin: 3rem 0;
+            backdrop-filter: blur(14px);
         }}
     </style>
     """,
