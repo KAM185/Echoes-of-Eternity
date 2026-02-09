@@ -55,9 +55,9 @@ def generate_analysis_stream(
     prompt: str,
 ) -> Tuple[Generator[str, None, None], dict]:
     """
-    Streams Gemini response text and returns:
-      - a replayable generator of text chunks
-      - a parsed JSON dict (empty if parsing fails)
+    Stream Gemini analysis text with fallback models.
+    Does NOT force JSON MIME (Gemini-safe).
+    Returns a replayable stream + parsed JSON if found.
     """
 
     accumulated_text = ""
@@ -72,29 +72,34 @@ def generate_analysis_stream(
             response = model.generate_content(
                 [prompt, image],
                 stream=True,
-                generation_config={
-                    "response_mime_type": "application/json"
-                },
             )
 
-            # Consume the stream ONCE
             for chunk in response:
                 text = getattr(chunk, "text", "")
                 if isinstance(text, str) and text:
                     accumulated_text += text
                     streamed_chunks.append(text)
 
-            # Attempt JSON parsing
+            # Try to extract JSON from text
+            json_text = accumulated_text.strip()
+
+            # Remove markdown fences if present
+            if "```" in json_text:
+                parts = json_text.split("```")
+                for part in parts:
+                    part = part.strip()
+                    if part.startswith("{") and part.endswith("}"):
+                        json_text = part
+                        break
+
             try:
-                parsed = json.loads(accumulated_text)
+                parsed = json.loads(json_text)
             except json.JSONDecodeError:
                 parsed = {}
 
-            # Successful model — stop fallback loop
-            break
+            break  # success
 
         except Exception as e:
-            # Silently skip unsupported / deprecated models
             if "404" in str(e) or "NotFound" in str(e):
                 continue
 
@@ -108,12 +113,12 @@ def generate_analysis_stream(
         if last_error:
             st.exception(last_error)
 
-    # Replayable generator (Streamlit-safe)
     def stream_generator():
         for chunk in streamed_chunks:
             yield chunk
 
     return stream_generator(), parsed
+
 
 
 # =================================================
