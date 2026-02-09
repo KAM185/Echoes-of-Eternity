@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────
-# Glowing & fading “aura” title styling
+# Styling: dark gray title with faint glow & shadow
 # ────────────────────────────────────────────────
 bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
 
@@ -47,48 +47,48 @@ st.markdown(
             border: 1px solid rgba(190, 160, 255, 0.20);
         }}
 
-        /* Fainting & glowing title */
+        /* Dark gray title with faint glow and slow fading */
         h1 {{
             font-family: 'Georgia', serif;
             font-size: 5rem !important;
             font-weight: bold;
             text-align: center;
-            background: linear-gradient(90deg, #0f1c3a, #1e3a5f, #2a4e7a, #3a6aa6, #4a82c6, #6a9ae6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            background-size: 400% 400%;
-            animation: glowFade 8s ease-in-out infinite, gradientFlow 10s ease infinite;
+            color: #2a2a2a;
             text-shadow:
-                0 0 30px #a78bfa,
-                0 0 60px #c4a1ff,
-                0 0 90px #ffd07a,
-                0 0 140px #ffdb8a,
-                0 0 200px #ffd07a;
-            letter-spacing: 5px;
+                0 0 10px rgba(0,0,0,0.7),
+                0 0 20px rgba(0,0,0,0.5),
+                0 0 30px rgba(0,0,0,0.3);
+            animation: fadeGlow 6s ease-in-out infinite alternate;
+            letter-spacing: 3px;
             margin: 0.5rem 0 1.2rem 0;
         }}
-        @keyframes gradientFlow {{
-            0% {{ background-position: 0% 50%; }}
-            50% {{ background-position: 100% 50%; }}
-            100% {{ background-position: 0% 50%; }}
+        @keyframes fadeGlow {{
+            0% {{
+                text-shadow:
+                    0 0 5px rgba(50,50,50,0.3),
+                    0 0 10px rgba(50,50,50,0.2);
+                color: #1f1f1f;
+            }}
+            50% {{
+                text-shadow:
+                    0 0 10px rgba(80,80,80,0.4),
+                    0 0 20px rgba(80,80,80,0.25);
+                color: #2a2a2a;
+            }}
+            100% {{
+                text-shadow:
+                    0 0 5px rgba(50,50,50,0.3),
+                    0 0 10px rgba(50,50,50,0.2);
+                color: #1f1f1f;
+            }}
         }}
-        @keyframes glowFade {{
-            0%, 100% {{ text-shadow:
-                0 0 20px #a78bfa,
-                0 0 40px #c4a1ff,
-                0 0 60px #ffd07a; }}
-            50% {{ text-shadow:
-                0 0 5px #a78bfa,
-                0 0 10px #c4a1ff,
-                0 0 15px #ffd07a; }}
-        }}
+
         h3 em {{
             font-size: 2rem;
-            color: #d4b37a !important;
+            color: #aaa68c !important;
             text-align: center;
             display: block;
-            opacity: 0.92;
+            opacity: 0.85;
             text-shadow: 0 2px 15px #000;
         }}
     </style>
@@ -139,20 +139,19 @@ if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image 
         stream_placeholder = st.empty()
         full_response = ""
         try:
-            for chunk in generate_analysis_stream(
+            # Silent fallback models
+            gen_stream, parsed_result = generate_analysis_stream(
                 st.session_state.image,
                 SYSTEM_PROMPT + ANALYSIS_PROMPT,
-            )[0]:
+            )
+            for chunk in gen_stream:
                 full_response += chunk
                 stream_placeholder.markdown(full_response + " ▌")
-            # Parse JSON safely
-            result = generate_analysis_stream(st.session_state.image, SYSTEM_PROMPT + ANALYSIS_PROMPT)[1]
-            st.session_state.analysis_result = result
+            st.session_state.analysis_result = parsed_result
             stream_placeholder.empty()
             st.success("The echo has awakened.")
         except Exception as e:
             st.error("Failed to interpret the echo.")
-            stream_placeholder.markdown(f"**Raw response (debug):**\n\n{full_response}")
 
 # ────────────────────────────────────────────────
 # Results
@@ -178,6 +177,7 @@ if st.session_state.analysis_result:
         if not damaged_areas:
             st.info("No significant damaged areas detected.")
 
+    # Clear overlay with labels
     overlay = draw_damage_overlay(st.session_state.image, pres.get("damaged_areas", []))
     st.image(overlay, caption="Preservation damage overlay", use_container_width=True)
 
@@ -191,19 +191,6 @@ if st.session_state.analysis_result:
                 os.unlink(audio_path)
             except:
                 pass
-        else:
-            st.components.v1.html(
-                f"""
-                <script>
-                const ut = new SpeechSynthesisUtterance({json.dumps(story)});
-                ut.lang = 'en-GB';
-                ut.rate = 0.92;
-                ut.pitch = 1.05;
-                speechSynthesis.speak(ut);
-                </script>
-                """,
-                height=0
-            )
 
     st.download_button(
         "Download full analysis (JSON)",
@@ -221,24 +208,24 @@ question = st.text_input("Your question to the monument…", key="chat_input")
 if question and question.strip():
     st.session_state.chat_history.append({"role": "user", "content": question})
     with st.spinner("The monument answers..."):
+        reply = "The winds carry my voice faintly... ask again."
         try:
-            # Use same fallback logic as utils
             for model_name in ["gemma-3-27b-it","gemma-3-12b-it","gemma-3-4b-it","gemma-3-1b-it",
                                "gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]:
                 try:
                     model = init_gemini(model_name)
                     response = model.generate_content(question)
                     reply = response.text.strip()
-                    break
+                    if reply:
+                        break
                 except:
-                    reply = None
-            if not reply:
-                reply = "The winds carry my voice faintly... ask again."
+                    continue
         except:
-            reply = "The winds carry my voice faintly... ask again."
+            pass
 
-    st.session_state.chat_history.append({"role": "monument", "content": reply})
+        st.session_state.chat_history.append({"role": "monument", "content": reply})
 
 for msg in st.session_state.chat_history:
     role = "You" if msg["role"] == "user" else "Monument"
     st.markdown(f"**{role}:** {msg['content']}")
+
