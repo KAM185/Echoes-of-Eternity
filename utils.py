@@ -22,21 +22,20 @@ def init_gemini():
 
 # -------------------------------------------------
 # MODEL POOL (ORDER MATTERS)
-# Gemini-3 FIRST (hackathon priority)
-# Vision models LAST (guaranteed fallback)
+# Gemini-3 FIRST → Vision fallback LAST
 # -------------------------------------------------
 MODEL_POOL = [
-    # Gemini 3 (experimental vision / reasoning)
+    # Gemini 3 (hackathon priority)
     "gemini-3-pro-preview",
     "gemini-3-pro",
     "gemini-3-flash-preview",
     "gemini-3-flash",
 
-    # Gemini 1.5 (strong reasoning)
+    # Gemini 1.5 (reasoning)
     "gemini-1.5-pro",
     "gemini-1.5-flash",
 
-    # Vision-guaranteed fallback (ALWAYS WORKS)
+    # Vision-guaranteed fallback
     "gemini-1.5-pro-vision",
     "gemini-1.5-flash-vision",
 ]
@@ -62,10 +61,9 @@ def _run_model(model_name: str, image: Image.Image, prompt: str) -> str:
     return response.text.strip()
 
 
-def _looks_like_image_ignored(text: str) -> bool:
+def _image_was_ignored(text: str) -> bool:
     """
-    Detect cases where the model ignored the image
-    and defaulted to unknown everywhere.
+    Detect cases where model ignored image input.
     """
     try:
         data = json.loads(text)
@@ -76,14 +74,11 @@ def _looks_like_image_ignored(text: str) -> bool:
     name = ident.get("name", "").lower()
     score = float(ident.get("confidence_score", 0))
 
-    if name in ("", "unknown") and score == 0:
-        return True
-
-    return False
+    return name in ("", "unknown") and score == 0
 
 
 # -------------------------------------------------
-# MAIN ANALYSIS STREAM
+# MAIN API USED BY app.py
 # -------------------------------------------------
 def generate_analysis_stream(
     image_bytes: bytes,
@@ -93,29 +88,21 @@ def generate_analysis_stream(
     init_gemini()
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    last_error = None
-
     for model_name in MODEL_POOL:
         try:
             text = _run_model(model_name, image, system_prompt)
 
-            # Detect silent image failure
-            if _looks_like_image_ignored(text):
-                raise RuntimeError("Image ignored by model")
+            if _image_was_ignored(text):
+                raise RuntimeError("Image ignored")
 
             yield text
             return  # SUCCESS
 
         except Exception as e:
-            last_error = f"{model_name}: {e}"
-            st.warning(f"{model_name} failed — trying next model")
-            time.sleep(0.6)
+            st.warning(f"{model_name} failed — trying next")
+            time.sleep(0.5)
 
-    # -------------------------------------------------
-    # HARD FALLBACK (should almost never happen)
-    # -------------------------------------------------
-    st.error("All Gemini models failed. Returning safe fallback.")
-
+    # -------- HARD FALLBACK --------
     fallback = {
         "monument_identification": {
             "name": "unknown",
@@ -149,13 +136,13 @@ def generate_analysis_stream(
             "can_be_restored": "unknown",
             "recommended_methods": [],
             "preventive_measures": [
-                "Routine visual inspections",
+                "Routine inspection",
                 "Environmental monitoring",
-                "Visitor impact management"
+                "Visitor impact control"
             ]
         },
         "first_person_narrative": {
-            "story_from_monument_perspective": "Time moves quietly around me."
+            "story_from_monument_perspective": "Time flows quietly around me."
         }
     }
 
@@ -163,12 +150,13 @@ def generate_analysis_stream(
 
 
 # -------------------------------------------------
-# DAMAGE OVERLAY
+# DAMAGE OVERLAY (USED BY app.py)
 # -------------------------------------------------
 def draw_damage_overlay(
     image: Image.Image,
     damages: List[dict]
 ) -> Image.Image:
+
     base = image.convert("RGBA")
     overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
@@ -201,4 +189,5 @@ def draw_damage_overlay(
             )
 
     return Image.alpha_composite(base, overlay)
+
 
