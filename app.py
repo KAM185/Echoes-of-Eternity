@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────
-# Styling: dark gray title with faint glow & shadow
+# Styling: light gray title with faint glow & soft pulse
 # ────────────────────────────────────────────────
 bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
 
@@ -47,39 +47,39 @@ st.markdown(
             border: 1px solid rgba(190, 160, 255, 0.20);
         }}
 
-        /* Dark gray title with faint glow and slow fading */
+        /* Light gray / almost white title with faint glow & soft pulse */
         h1 {{
             font-family: 'Georgia', serif;
             font-size: 5rem !important;
             font-weight: bold;
             text-align: center;
-            color: #2a2a2a;
+            color: #e0e0e0;
             text-shadow:
-                0 0 10px rgba(0,0,0,0.7),
-                0 0 20px rgba(0,0,0,0.5),
-                0 0 30px rgba(0,0,0,0.3);
-            animation: fadeGlow 6s ease-in-out infinite alternate;
+                0 0 10px rgba(255,255,255,0.3),
+                0 0 20px rgba(200,200,200,0.25),
+                0 0 30px rgba(180,180,180,0.2);
+            animation: fadeGlow 10s ease-in-out infinite alternate;
             letter-spacing: 3px;
             margin: 0.5rem 0 1.2rem 0;
         }}
         @keyframes fadeGlow {{
             0% {{
                 text-shadow:
-                    0 0 5px rgba(50,50,50,0.3),
-                    0 0 10px rgba(50,50,50,0.2);
-                color: #1f1f1f;
+                    0 0 5px rgba(255,255,255,0.15),
+                    0 0 10px rgba(200,200,200,0.10);
+                color: #d9d9d9;
             }}
             50% {{
                 text-shadow:
-                    0 0 10px rgba(80,80,80,0.4),
-                    0 0 20px rgba(80,80,80,0.25);
-                color: #2a2a2a;
+                    0 0 12px rgba(255,255,255,0.4),
+                    0 0 25px rgba(220,220,220,0.25);
+                color: #e0e0e0;
             }}
             100% {{
                 text-shadow:
-                    0 0 5px rgba(50,50,50,0.3),
-                    0 0 10px rgba(50,50,50,0.2);
-                color: #1f1f1f;
+                    0 0 5px rgba(255,255,255,0.15),
+                    0 0 10px rgba(200,200,200,0.10);
+                color: #d9d9d9;
             }}
         }}
 
@@ -105,14 +105,9 @@ st.markdown('<h3><em>Whispers of history in every stone</em></h3>', unsafe_allow
 # ────────────────────────────────────────────────
 # Session state
 # ────────────────────────────────────────────────
-if "analysis_result" not in st.session_state:
-    st.session_state.analysis_result = None
-if "image" not in st.session_state:
-    st.session_state.image = None
-if "overlay_image" not in st.session_state:
-    st.session_state.overlay_image = None
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+for key in ["analysis_result", "image", "overlay_image", "chat_history"]:
+    if key not in st.session_state:
+        st.session_state[key] = None if key != "chat_history" else []
 
 # ────────────────────────────────────────────────
 # Image uploader
@@ -122,7 +117,7 @@ uploaded_file = st.file_uploader(
     type=["jpg", "jpeg", "png"],
 )
 
-if uploaded_file is not None:
+if uploaded_file:
     try:
         image = Image.open(uploaded_file).convert("RGB")
         st.session_state.image = image
@@ -139,7 +134,6 @@ if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image 
         stream_placeholder = st.empty()
         full_response = ""
         try:
-            # Silent fallback models
             gen_stream, parsed_result = generate_analysis_stream(
                 st.session_state.image,
                 SYSTEM_PROMPT + ANALYSIS_PROMPT,
@@ -150,7 +144,7 @@ if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image 
             st.session_state.analysis_result = parsed_result
             stream_placeholder.empty()
             st.success("The echo has awakened.")
-        except Exception as e:
+        except Exception:
             st.error("Failed to interpret the echo.")
 
 # ────────────────────────────────────────────────
@@ -177,7 +171,6 @@ if st.session_state.analysis_result:
         if not damaged_areas:
             st.info("No significant damaged areas detected.")
 
-    # Clear overlay with labels
     overlay = draw_damage_overlay(st.session_state.image, pres.get("damaged_areas", []))
     st.image(overlay, caption="Preservation damage overlay", use_container_width=True)
 
@@ -215,8 +208,8 @@ if question and question.strip():
                 try:
                     model = init_gemini(model_name)
                     response = model.generate_content(question)
-                    reply = response.text.strip()
-                    if reply:
+                    if hasattr(response, "text") and response.text.strip():
+                        reply = response.text.strip()
                         break
                 except:
                     continue
@@ -228,4 +221,3 @@ if question and question.strip():
 for msg in st.session_state.chat_history:
     role = "You" if msg["role"] == "user" else "Monument"
     st.markdown(f"**{role}:** {msg['content']}")
-
