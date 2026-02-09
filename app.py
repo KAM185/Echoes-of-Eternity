@@ -18,6 +18,18 @@ import os
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+models = genai.list_models()
+
+for m in models:
+    print(m.name)
+    print("  supported methods:", m.supported_generation_methods)
+
+
+import google.generativeai as genai
+import os
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
 try:
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content("Say OK")
