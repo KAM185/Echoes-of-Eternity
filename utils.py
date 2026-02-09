@@ -1,8 +1,10 @@
+# utils.py
+
 import os
 import time
 import json
 import tempfile
-from typing import Generator, Tuple
+from typing import Generator, Tuple, List
 
 import streamlit as st
 import google.generativeai as genai
@@ -10,54 +12,70 @@ from PIL import Image, ImageDraw
 from gtts import gTTS
 
 
-# -------------------------------------------------
-# Gemini model initialization (cached)
-# -------------------------------------------------
+# =================================================
+# Gemini model priority (Gemini 3 first)
+# =================================================
+GEMINI_MODELS: List[str] = [
+    # 🔥 Gemini 3 (try first)
+    "gemini-3.0-pro",
+    "gemini-3.0-flash",
+    "gemini-3.0-flash-lite",
+
+    # Gemini 1.5
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-002",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-002",
+
+    # Gemini 1.0
+    "gemini-1.0-pro-vision",
+    "gemini-1.0-pro",
+]
+
+
+# =================================================
+# Gemini initialization (cached)
+# =================================================
 @st.cache_resource
 def init_gemini(model_name: str):
     """
     Initialize and cache a Gemini model.
-    API key is read securely from environment variable.
+    API key is read from environment variable.
     """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "GEMINI_API_KEY not found. Please set it in environment variables or Streamlit secrets."
+            "GEMINI_API_KEY not found. "
+            "Set it as an environment variable or Streamlit secret."
         )
 
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
 
 
-# -------------------------------------------------
+# =================================================
 # Gemini image analysis with streaming + fallback
-# -------------------------------------------------
+# =================================================
 def generate_analysis_stream(
     image: Image.Image,
     prompt: str,
-    primary_model: str,
-    fallback_model: str,
 ) -> Tuple[Generator[str, None, None], dict]:
     """
-    Stream Gemini analysis text and return parsed JSON result.
+    Stream Gemini analysis text with multi-model fallback.
+    Returns:
+      - A generator yielding text chunks (Streamlit-safe)
+      - A parsed JSON dict (empty if parsing fails)
     """
+
     accumulated_text = ""
+    streamed_chunks: List[str] = []
+    parsed: dict = {}
+    last_error: Exception | None = None
 
-    def stream_generator():
-        nonlocal accumulated_text
-
+    for model_name in GEMINI_MODELS:
         try:
-            model = init_gemini(primary_model)
-            response = model.generate_content(
-                [prompt, image],
-                stream=True,
-                generation_config={
-                    "response_mime_type": "application/json"
-                },
-            )
-        except Exception:
-            st.warning("Primary model unavailable. Falling back to faster model…")
-            model = init_gemini(fallback_model)
+            model = init_gemini(model_name)
+
             response = model.generate_content(
                 [prompt, image],
                 stream=True,
@@ -66,37 +84,53 @@ def generate_analysis_stream(
                 },
             )
 
-        for chunk in response:
-            if hasattr(chunk, "text") and chunk.text:
-                accumulated_text += chunk.text
-                yield chunk.text
+            # Consume stream ONCE
+            for chunk in response:
+                text = getattr(chunk, "text", "")
+                if isinstance(text, str) and text:
+                    accumulated_text += text
+                    streamed_chunks.append(text)
 
-    # Run stream once to completion
-    for _ in stream_generator():
-        pass
+            # Attempt JSON parsing
+            try:
+                parsed = json.loads(accumulated_text)
+            except json.JSONDecodeError:
+                parsed = {}
 
-    # Attempt JSON parsing with retries
-    parsed = {}
-    for attempt in range(3):
-        try:
-            parsed = json.loads(accumulated_text)
+            # Success — stop trying models
             break
-        except json.JSONDecodeError:
-            time.sleep(0.6)
+
+        except Exception as e:
+            last_error = e
+            accumulated_text = ""
+            streamed_chunks.clear()
+            continue
+
+    if not streamed_chunks:
+        st.error("All Gemini models failed to generate a response.")
+        if last_error:
+            st.exception(last_error)
+
+    # Replayable generator (Streamlit-safe)
+    def stream_generator():
+        for chunk in streamed_chunks:
+            yield chunk
 
     return stream_generator(), parsed
 
 
-# -------------------------------------------------
+# =================================================
 # Draw damage overlay on image
-# -------------------------------------------------
+# =================================================
 def draw_damage_overlay(
     image: Image.Image,
     damaged_areas: list,
 ) -> Image.Image:
     """
-    Draw semi-transparent overlays for damaged areas.
+    Draw semi-transparent red overlays for damaged areas.
+    Expects bbox values normalized between 0–1.
     """
+
     if not damaged_areas:
         return image
 
@@ -112,6 +146,7 @@ def draw_damage_overlay(
             continue
 
         x1, y1, x2, y2 = bbox
+
         rect = [
             int(x1 * width),
             int(y1 * height),
@@ -128,23 +163,26 @@ def draw_damage_overlay(
     return Image.alpha_composite(base, overlay)
 
 
-# -------------------------------------------------
+# =================================================
 # Text-to-Speech generation
-# -------------------------------------------------
+# =================================================
 def generate_audio(text: str) -> str:
     """
     Generate narration audio using gTTS.
-    Returns path to temporary mp3 file, or empty string on failure.
+    Returns path to a temporary mp3 file, or empty string on failure.
     """
-    if not text.strip():
+
+    if not text or not text.strip():
         return ""
 
     try:
         tts = gTTS(text=text, lang="en")
         tmp_file = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".mp3"
+            delete=False,
+            suffix=".mp3",
         )
         tts.save(tmp_file.name)
         return tmp_file.name
     except Exception:
         return ""
+
