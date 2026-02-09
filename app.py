@@ -15,14 +15,17 @@ if st.button("Check API key loaded"):
 
 import google.generativeai as genai
 import os
+import streamlit as st
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+if st.button("List available Gemini models"):
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-models = genai.list_models()
+    models = genai.list_models()
+    for m in models:
+        st.write(m.name)
+        st.write("supported methods:", m.supported_generation_methods)
+        st.write("---")
 
-for m in models:
-    print(m.name)
-    print("  supported methods:", m.supported_generation_methods)
 
 
 import google.generativeai as genai
