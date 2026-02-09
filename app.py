@@ -14,6 +14,20 @@ if st.button("Check API key loaded"):
         st.error("API key NOT found")
 
 import google.generativeai as genai
+import os
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+try:
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content("Say OK")
+    print(response.text)
+except Exception as e:
+    print("ERROR TYPE:", type(e))
+    print("ERROR MESSAGE:", e)
+
+
+import google.generativeai as genai
 
 if st.button("Test Gemini text"):
     try:
@@ -25,6 +39,8 @@ if st.button("Test Gemini text"):
     except Exception as e:
         st.error("Text generation FAILED")
         st.exception(e)
+
+
 
 
 
