@@ -5,46 +5,21 @@ from typing import List
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import google.generativeai as genai
 
-
-# =================================================
-# SYSTEM PROMPT
-# =================================================
-SYSTEM_PROMPT = """
-You are a world-class architectural historian and monument recognition expert.
-
-INSTRUCTIONS:
-- Identify the monument shown in the image.
-- If the monument is famous or widely recognizable, identify it confidently.
-- Do NOT respond with "unknown" when there is strong visual evidence.
-- Make a best-guess identification with a confidence score.
-- The Taj Mahal in Agra, India MUST be identified correctly if visible.
-
-OUTPUT:
-Return VALID JSON ONLY. No markdown. No explanations.
-"""
+from prompts import SYSTEM_PROMPT, ANALYSIS_PROMPT
 
 
 # =================================================
-# GEMINI INITIALIZATION
+# GEMINI INIT
 # =================================================
 def init_gemini(api_key: str) -> None:
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is required.")
+        raise RuntimeError("GEMINI_API_KEY missing")
     genai.configure(api_key=api_key)
 
 
 # =================================================
-# MODEL DISCOVERY
+# MODEL SELECTION (Gemini 3 first)
 # =================================================
-def get_available_models() -> list[str]:
-    models = genai.list_models()
-    return [
-        m.name.replace("models/", "")
-        for m in models
-        if "generateContent" in m.supported_generation_methods
-    ]
-
-
 def select_model() -> str:
     priority = [
         "gemini-3-pro",
@@ -53,51 +28,29 @@ def select_model() -> str:
         "gemini-1.5-flash",
     ]
 
-    available = get_available_models()
+    available = [
+        m.name.replace("models/", "")
+        for m in genai.list_models()
+        if "generateContent" in m.supported_generation_methods
+    ]
 
     for model in priority:
         if model in available:
             return model
 
-    raise RuntimeError("No usable Gemini model available.")
+    raise RuntimeError("No supported Gemini model available")
 
 
 # =================================================
-# IMAGE ENHANCEMENT (DISPLAY ONLY)
+# ANALYSIS (ORIGINAL IMAGE ONLY)
 # =================================================
-def enhance_image_for_display(image: Image.Image) -> Image.Image:
-    """
-    Enhances the image ONLY for user viewing.
-    This image must NOT be used for AI identification.
-    """
-    img = image.copy()
-
-    img = ImageEnhance.Contrast(img).enhance(1.15)
-    img = ImageEnhance.Brightness(img).enhance(1.05)
-    img = ImageEnhance.Color(img).enhance(1.10)
-    img = ImageEnhance.Sharpness(img).enhance(1.20)
-    img = img.filter(ImageFilter.DETAIL)
-
-    return img
-
-
-# =================================================
-# MONUMENT ANALYSIS (ORIGINAL IMAGE ONLY)
-# =================================================
-def analyze_monument(
-    original_image_bytes: bytes,
-    api_key: str,
-) -> dict:
-    """
-    Uses the ORIGINAL uploaded image bytes for identification.
-    Enhanced images must never be passed here.
-    """
+def analyze_monument(image_bytes: bytes, api_key: str) -> dict:
     init_gemini(api_key)
 
     try:
-        image = Image.open(io.BytesIO(original_image_bytes)).convert("RGB")
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception:
-        return _fallback_response()
+        return _fallback()
 
     try:
         model = genai.GenerativeModel(
@@ -106,48 +59,50 @@ def analyze_monument(
         )
 
         response = model.generate_content(
-            [
-                image,
-                "Identify the monument and return JSON exactly as specified."
-            ],
+            [image, ANALYSIS_PROMPT],
             stream=False,
         )
 
         return json.loads(response.text)
 
     except Exception:
-        return _fallback_response()
+        return _fallback()
 
 
 # =================================================
-# DAMAGE OVERLAY (OPTIONAL)
+# DISPLAY-ONLY IMAGE ENHANCEMENT
 # =================================================
-def draw_damage_overlay(
-    image: Image.Image,
-    damages: List[dict]
-) -> Image.Image:
+def enhance_image_for_display(image: Image.Image) -> Image.Image:
+    img = image.copy()
+
+    img = ImageEnhance.Contrast(img).enhance(1.10)
+    img = ImageEnhance.Brightness(img).enhance(1.03)
+    img = ImageEnhance.Color(img).enhance(1.08)
+    img = ImageEnhance.Sharpness(img).enhance(1.15)
+    img = img.filter(ImageFilter.DETAIL)
+
+    return img
+
+
+# =================================================
+# DAMAGE OVERLAY
+# =================================================
+def draw_damage_overlay(image: Image.Image, damages: List[dict]) -> Image.Image:
     base = image.convert("RGBA")
     overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
-    width, height = base.size
+    w, h = base.size
 
     for dmg in damages:
         region = dmg.get("approximate_image_region", "")
         try:
-            coords = [float(c.strip()) for c in region.split(",")]
-            if len(coords) != 4:
-                continue
+            x1, y1, x2, y2 = [float(c) for c in region.split(",")]
         except Exception:
             continue
 
-        x1 = int(coords[0] * width)
-        y1 = int(coords[1] * height)
-        x2 = int(coords[2] * width)
-        y2 = int(coords[3] * height)
-
         draw.rectangle(
-            [x1, y1, x2, y2],
+            [x1 * w, y1 * h, x2 * w, y2 * h],
             fill=(255, 0, 0, 90),
             outline=(255, 50, 50, 220),
             width=4,
@@ -157,9 +112,9 @@ def draw_damage_overlay(
 
 
 # =================================================
-# FALLBACK RESPONSE
+# FALLBACK
 # =================================================
-def _fallback_response() -> dict:
+def _fallback() -> dict:
     return {
         "monument_identification": {
             "name": "unknown",
@@ -175,12 +130,28 @@ def _fallback_response() -> dict:
             "distinct_features_visible": []
         },
         "historical_facts": {
-            "summary": "unknown"
+            "summary": "unknown",
+            "timeline": [],
+            "mysteries_or_lesser_known_facts": []
         },
-        "visible_damage_assessment": [],
+        "visible_damage_assessment": [
+            {
+                "damage_type": "no visible damage observed",
+                "description": "No visible damage observed",
+                "probable_cause": "n/a",
+                "severity": "low",
+                "approximate_image_region": ""
+            }
+        ],
+        "documented_conservation_issues": [],
         "restoration_guidance": {
             "can_be_restored": "unknown",
-            "recommended_methods": []
+            "recommended_methods": [],
+            "preventive_measures": []
+        },
+        "first_person_narrative": {
+            "story_from_monument_perspective": ""
         }
     }
+
 
