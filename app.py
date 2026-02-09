@@ -13,7 +13,6 @@ from utils import (
 )
 from prompts import SYSTEM_PROMPT, ANALYSIS_PROMPT, CHAT_PROMPT
 
-
 # ────────────────────────────────────────────────
 # Page config
 # ────────────────────────────────────────────────
@@ -29,7 +28,73 @@ st.set_page_config(
 # ────────────────────────────────────────────────
 st.markdown("<h1>Echoes of Eternity</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<h3><em>Whispers of history in every stone</em></h3>",
+    '<h3><em>Whispers of history in every stone</em></h3>',
+    unsafe_allow_html=True
+)
+
+# ────────────────────────────────────────────────
+# Background + transparent UI + glowing title
+# ────────────────────────────────────────────────
+bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
+
+st.markdown(
+    f"""
+    <style>
+        .stApp {{
+            background: url('{bg_url}') center/cover no-repeat fixed !important;
+            background-color: #0a0e1a;
+        }}
+        section[data-testid="stAppViewContainer"] {{
+            background: rgba(8, 10, 22, 0.25) !important;
+        }}
+        .block-container {{
+            background: rgba(18, 22, 38, 0.32) !important;
+            backdrop-filter: blur(14px);
+            border-radius: 24px;
+            box-shadow: 0 15px 60px rgba(0,0,0,0.55);
+            padding: 3.2rem 2.5rem !important;
+            margin: 2rem auto;
+            max-width: 1150px;
+            border: 1px solid rgba(190, 160, 255, 0.20);
+        }}
+
+        h1 {{
+            font-family: 'Georgia', serif;
+            font-size: 5rem !important;
+            font-weight: bold;
+            text-align: center;
+            background: linear-gradient(90deg, #0f1c3a, #1e3a5f, #2a4e7a, #3a6aa6, #4a82c6, #6a9ae6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 400% 400%;
+            animation: gradientFlow 10s ease infinite;
+            text-shadow:
+                0 0 30px #a78bfa,
+                0 0 60px #c4a1ff,
+                0 0 90px #ffd07a,
+                0 0 140px #ffdb8a,
+                0 0 200px #ffd07a;
+            letter-spacing: 5px;
+        }}
+
+        @keyframes gradientFlow {{
+            0% {{ background-position: 0% 50%; }}
+            50% {{ background-position: 100% 50%; }}
+            100% {{ background-position: 0% 50%; }}
+        }}
+
+        .story {{
+            background: rgba(25, 30, 50, 0.40) !important;
+            border: 1px solid rgba(190, 160, 255, 0.40);
+            box-shadow: 0 0 50px rgba(190, 160, 255, 0.25);
+            padding: 2.5rem;
+            border-radius: 20px;
+            font-size: 1.25em;
+            line-height: 1.9;
+            margin: 3rem 0;
+        }}
+    </style>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -43,7 +108,6 @@ if "image" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-
 # ────────────────────────────────────────────────
 # Image uploader
 # ────────────────────────────────────────────────
@@ -53,27 +117,18 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    try:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.session_state.image = image
-        st.image(image, caption="Your uploaded monument", use_container_width=True)
-    except Exception as e:
-        st.error(f"Could not load image: {e}")
-
+    image = Image.open(uploaded_file).convert("RGB")
+    st.session_state.image = image
+    st.image(image, caption="Your uploaded monument", use_container_width=True)
 
 # ────────────────────────────────────────────────
 # Analysis button
 # ────────────────────────────────────────────────
-if st.button(
-    "Awaken the Echo",
-    type="primary",
-    disabled=st.session_state.image is None,
-):
+if st.button("Awaken the Echo", disabled=st.session_state.image is None):
     with st.spinner("Listening across centuries..."):
         stream_placeholder = st.empty()
         full_response = ""
 
-        # ✅ CORRECT USAGE (unpack return values)
         stream, parsed = generate_analysis_stream(
             st.session_state.image,
             SYSTEM_PROMPT + ANALYSIS_PROMPT,
@@ -89,9 +144,8 @@ if st.button(
             st.session_state.analysis_result = parsed
             st.success("The echo has awakened.")
         else:
-            st.error("The echo was unclear. Please try again.")
-            st.markdown(f"**Raw response (debug):**\n\n{full_response}")
-
+            st.error("Failed to interpret the echo.")
+            st.markdown(f"**Raw response:**\n\n{full_response}")
 
 # ────────────────────────────────────────────────
 # Results
@@ -112,37 +166,20 @@ if st.session_state.analysis_result:
         pres = res.get("preservation", {})
         st.markdown(f"**Severity score:** {pres.get('severity_score', 'N/A')}/100")
 
-        damage_types = pres.get("damage_types", [])
-        if damage_types:
-            st.markdown("**Damage types:** " + ", ".join(damage_types))
-        else:
-            st.markdown("**Damage types:** None major visible")
-
     overlay = draw_damage_overlay(
         st.session_state.image,
         pres.get("damaged_areas", []),
     )
-    st.image(
-        overlay,
-        caption="Preservation damage overlay",
-        use_container_width=True,
-    )
+    st.image(overlay, caption="Preservation damage overlay", use_container_width=True)
 
     story = res.get("storytelling", "")
     if story:
-        st.markdown(
-            f'<div class="story">{story}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="story">{story}</div>', unsafe_allow_html=True)
 
         audio_path = generate_audio(story)
         if audio_path:
             st.audio(audio_path, format="audio/mp3")
-            try:
-                os.unlink(audio_path)
-            except Exception:
-                pass
-
+            os.unlink(audio_path)
 
 # ────────────────────────────────────────────────
 # Chat
@@ -151,36 +188,21 @@ st.markdown("## Ask the Echo")
 
 question = st.text_input("Your question to the monument…")
 
-if question and question.strip():
-    st.session_state.chat_history.append(
-        {"role": "user", "content": question}
-    )
+if question:
+    st.session_state.chat_history.append({"role": "user", "content": question})
 
-    with st.spinner("The monument answers..."):
-        try:
-            model = init_gemini("gemini-3.0-pro")
-        except Exception:
-            model = init_gemini("gemini-3.0-flash")
+    model = init_gemini("gemini-3.0-flash")
+    chat = model.start_chat()
 
-        try:
-            history = [
-                {
-                    "role": "user" if m["role"] == "user" else "model",
-                    "parts": [m["content"]],
-                }
-                for m in st.session_state.chat_history[:-1]
-            ]
-            chat = model.start_chat(history=history)
-            response = chat.send_message(question)
-            reply = response.text.strip()
-        except Exception:
-            reply = "The winds carry my voice faintly… ask again."
+    try:
+        reply = chat.send_message(question).text.strip()
+    except Exception:
+        reply = "The winds carry my voice faintly… ask again."
 
-    st.session_state.chat_history.append(
-        {"role": "monument", "content": reply}
-    )
+    st.session_state.chat_history.append({"role": "monument", "content": reply})
 
 for msg in st.session_state.chat_history:
     role = "You" if msg["role"] == "user" else "Monument"
     st.markdown(f"**{role}:** {msg['content']}")
+
 
