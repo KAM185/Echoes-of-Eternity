@@ -2,19 +2,8 @@ import io
 import json
 from typing import List
 
-import streamlit as st
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import google.generativeai as genai
-
-
-# =================================================
-# STREAMLIT PAGE CONFIG
-# =================================================
-st.set_page_config(
-    page_title="Monument Identifier",
-    page_icon="🏛️",
-    layout="wide",
-)
 
 
 # =================================================
@@ -32,61 +21,22 @@ INSTRUCTIONS:
 
 OUTPUT:
 Return VALID JSON ONLY. No markdown. No explanations.
-
-JSON FORMAT:
-{
-  "monument_identification": {
-    "name": "",
-    "confidence_score": 0.0,
-    "city": "",
-    "country": "",
-    "coordinates": ""
-  },
-  "architectural_analysis": {
-    "style": "",
-    "period_or_dynasty": "",
-    "primary_materials": [],
-    "distinct_features_visible": []
-  },
-  "historical_facts": {
-    "summary": ""
-  },
-  "visible_damage_assessment": [
-    {
-      "damage_type": "",
-      "description": "",
-      "severity": "low | medium | high",
-      "approximate_image_region": ""
-    }
-  ],
-  "restoration_guidance": {
-    "can_be_restored": "yes | no | unknown",
-    "recommended_methods": []
-  }
-}
 """
 
 
 # =================================================
 # GEMINI INITIALIZATION
 # =================================================
-@st.cache_resource
-def init_gemini():
-    api_key = st.secrets.get("GEMINI_API_KEY")
+def init_gemini(api_key: str) -> None:
     if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY not found. "
-            "Add it to .streamlit/secrets.toml"
-        )
+        raise RuntimeError("GEMINI_API_KEY is required.")
     genai.configure(api_key=api_key)
 
 
 # =================================================
 # MODEL DISCOVERY
 # =================================================
-@st.cache_resource
 def get_available_models() -> list[str]:
-    init_gemini()
     models = genai.list_models()
     return [
         m.name.replace("models/", "")
@@ -104,6 +54,7 @@ def select_model() -> str:
     ]
 
     available = get_available_models()
+
     for model in priority:
         if model in available:
             return model
@@ -116,8 +67,8 @@ def select_model() -> str:
 # =================================================
 def enhance_image_for_display(image: Image.Image) -> Image.Image:
     """
-    Enhances image ONLY for user viewing.
-    NOT used for AI identification.
+    Enhances the image ONLY for user viewing.
+    This image must NOT be used for AI identification.
     """
     img = image.copy()
 
@@ -133,26 +84,30 @@ def enhance_image_for_display(image: Image.Image) -> Image.Image:
 # =================================================
 # MONUMENT ANALYSIS (ORIGINAL IMAGE ONLY)
 # =================================================
-def analyze_monument(original_image_bytes: bytes) -> dict:
-    try:
-        original_image = Image.open(
-            io.BytesIO(original_image_bytes)
-        ).convert("RGB")
-    except Exception as e:
-        st.error(f"Invalid image: {e}")
-        return {}
+def analyze_monument(
+    original_image_bytes: bytes,
+    api_key: str,
+) -> dict:
+    """
+    Uses the ORIGINAL uploaded image bytes for identification.
+    Enhanced images must never be passed here.
+    """
+    init_gemini(api_key)
 
-    model_name = select_model()
+    try:
+        image = Image.open(io.BytesIO(original_image_bytes)).convert("RGB")
+    except Exception:
+        return _fallback_response()
 
     try:
         model = genai.GenerativeModel(
-            model_name=model_name,
+            model_name=select_model(),
             system_instruction=SYSTEM_PROMPT,
         )
 
         response = model.generate_content(
             [
-                original_image,
+                image,
                 "Identify the monument and return JSON exactly as specified."
             ],
             stream=False,
@@ -160,9 +115,51 @@ def analyze_monument(original_image_bytes: bytes) -> dict:
 
         return json.loads(response.text)
 
-    except Exception as e:
-        st.error(f"AI analysis failed: {e}")
+    except Exception:
+        return _fallback_response()
 
+
+# =================================================
+# DAMAGE OVERLAY (OPTIONAL)
+# =================================================
+def draw_damage_overlay(
+    image: Image.Image,
+    damages: List[dict]
+) -> Image.Image:
+    base = image.convert("RGBA")
+    overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    width, height = base.size
+
+    for dmg in damages:
+        region = dmg.get("approximate_image_region", "")
+        try:
+            coords = [float(c.strip()) for c in region.split(",")]
+            if len(coords) != 4:
+                continue
+        except Exception:
+            continue
+
+        x1 = int(coords[0] * width)
+        y1 = int(coords[1] * height)
+        x2 = int(coords[2] * width)
+        y2 = int(coords[3] * height)
+
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            fill=(255, 0, 0, 90),
+            outline=(255, 50, 50, 220),
+            width=4,
+        )
+
+    return Image.alpha_composite(base, overlay)
+
+
+# =================================================
+# FALLBACK RESPONSE
+# =================================================
+def _fallback_response() -> dict:
     return {
         "monument_identification": {
             "name": "unknown",
@@ -177,55 +174,13 @@ def analyze_monument(original_image_bytes: bytes) -> dict:
             "primary_materials": [],
             "distinct_features_visible": []
         },
-        "historical_facts": {"summary": "unknown"},
+        "historical_facts": {
+            "summary": "unknown"
+        },
         "visible_damage_assessment": [],
         "restoration_guidance": {
             "can_be_restored": "unknown",
             "recommended_methods": []
         }
     }
-
-
-# =================================================
-# UI
-# =================================================
-st.title("🏛️ Monument Identification & Analysis")
-st.write(
-    "Upload a photo of a monument. "
-    "The image will be enhanced for viewing, "
-    "but the original image is used for AI analysis."
-)
-
-uploaded_file = st.file_uploader(
-    "Upload an image",
-    type=["jpg", "jpeg", "png"]
-)
-
-if uploaded_file:
-    original_bytes = uploaded_file.read()
-    original_image = Image.open(
-        io.BytesIO(original_bytes)
-    ).convert("RGB")
-
-    enhanced_image = enhance_image_for_display(original_image)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Original Image")
-        st.image(original_image, use_container_width=True)
-
-    with col2:
-        st.subheader("Enhanced View (Display Only)")
-        st.image(enhanced_image, use_container_width=True)
-
-    if st.button("🔍 Analyze Monument"):
-        with st.spinner("Analyzing monument..."):
-            result = analyze_monument(original_bytes)
-
-        st.subheader("📄 Analysis Result")
-        st.json(result)
-
-else:
-    st.info("Please upload a monument image to begin.")
 
