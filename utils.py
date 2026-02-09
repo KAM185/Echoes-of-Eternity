@@ -1,121 +1,122 @@
+# utils.py
 import io
 import json
-from typing import List
+import time
+from typing import Generator, List
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+import streamlit as st
+from PIL import Image, ImageDraw
 import google.generativeai as genai
 
-from prompts import SYSTEM_PROMPT, ANALYSIS_PROMPT
 
-
-# =================================================
-# GEMINI INIT
-# =================================================
-def init_gemini(api_key: str) -> None:
+# -------------------------------------------------
+# INIT GEMINI
+# -------------------------------------------------
+@st.cache_resource
+def init_gemini():
+    api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY missing")
+        raise RuntimeError("GEMINI_API_KEY not found in Streamlit secrets")
     genai.configure(api_key=api_key)
 
 
-# =================================================
-# MODEL SELECTION (Gemini 3 first)
-# =================================================
-def select_model() -> str:
-    priority = [
-        "gemini-3-pro",
-        "gemini-3-flash",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-    ]
+# -------------------------------------------------
+# MODEL POOL (ORDER MATTERS)
+# Gemini-3 FIRST (hackathon priority)
+# Vision models LAST (guaranteed fallback)
+# -------------------------------------------------
+MODEL_POOL = [
+    # Gemini 3 (experimental vision / reasoning)
+    "gemini-3-pro-preview",
+    "gemini-3-pro",
+    "gemini-3-flash-preview",
+    "gemini-3-flash",
 
-    available = [
-        m.name.replace("models/", "")
-        for m in genai.list_models()
-        if "generateContent" in m.supported_generation_methods
-    ]
+    # Gemini 1.5 (strong reasoning)
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
 
-    for model in priority:
-        if model in available:
-            return model
-
-    raise RuntimeError("No supported Gemini model available")
+    # Vision-guaranteed fallback (ALWAYS WORKS)
+    "gemini-1.5-pro-vision",
+    "gemini-1.5-flash-vision",
+]
 
 
-# =================================================
-# ANALYSIS (ORIGINAL IMAGE ONLY)
-# =================================================
-def analyze_monument(image_bytes: bytes, api_key: str) -> dict:
-    init_gemini(api_key)
+# -------------------------------------------------
+# INTERNAL HELPERS
+# -------------------------------------------------
+def _run_model(model_name: str, image: Image.Image, prompt: str) -> str:
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=prompt,
+    )
 
+    response = model.generate_content(
+        [image, prompt],
+        stream=False,
+    )
+
+    if not response or not response.text:
+        raise RuntimeError("Empty response")
+
+    return response.text.strip()
+
+
+def _looks_like_image_ignored(text: str) -> bool:
+    """
+    Detect cases where the model ignored the image
+    and defaulted to unknown everywhere.
+    """
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        data = json.loads(text)
     except Exception:
-        return _fallback()
+        return True
 
-    try:
-        model = genai.GenerativeModel(
-            model_name=select_model(),
-            system_instruction=SYSTEM_PROMPT,
-        )
+    ident = data.get("monument_identification", {})
+    name = ident.get("name", "").lower()
+    score = float(ident.get("confidence_score", 0))
 
-        response = model.generate_content(
-            [image, ANALYSIS_PROMPT],
-            stream=False,
-        )
+    if name in ("", "unknown") and score == 0:
+        return True
 
-        return json.loads(response.text)
-
-    except Exception:
-        return _fallback()
+    return False
 
 
-# =================================================
-# DISPLAY-ONLY IMAGE ENHANCEMENT
-# =================================================
-def enhance_image_for_display(image: Image.Image) -> Image.Image:
-    img = image.copy()
+# -------------------------------------------------
+# MAIN ANALYSIS STREAM
+# -------------------------------------------------
+def generate_analysis_stream(
+    image_bytes: bytes,
+    system_prompt: str,
+) -> Generator[str, None, None]:
 
-    img = ImageEnhance.Contrast(img).enhance(1.10)
-    img = ImageEnhance.Brightness(img).enhance(1.03)
-    img = ImageEnhance.Color(img).enhance(1.08)
-    img = ImageEnhance.Sharpness(img).enhance(1.15)
-    img = img.filter(ImageFilter.DETAIL)
+    init_gemini()
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    return img
+    last_error = None
 
-
-# =================================================
-# DAMAGE OVERLAY
-# =================================================
-def draw_damage_overlay(image: Image.Image, damages: List[dict]) -> Image.Image:
-    base = image.convert("RGBA")
-    overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    w, h = base.size
-
-    for dmg in damages:
-        region = dmg.get("approximate_image_region", "")
+    for model_name in MODEL_POOL:
         try:
-            x1, y1, x2, y2 = [float(c) for c in region.split(",")]
-        except Exception:
-            continue
+            text = _run_model(model_name, image, system_prompt)
 
-        draw.rectangle(
-            [x1 * w, y1 * h, x2 * w, y2 * h],
-            fill=(255, 0, 0, 90),
-            outline=(255, 50, 50, 220),
-            width=4,
-        )
+            # Detect silent image failure
+            if _looks_like_image_ignored(text):
+                raise RuntimeError("Image ignored by model")
 
-    return Image.alpha_composite(base, overlay)
+            yield text
+            return  # SUCCESS
 
+        except Exception as e:
+            last_error = f"{model_name}: {e}"
+            st.warning(f"{model_name} failed — trying next model")
+            time.sleep(0.6)
 
-# =================================================
-# FALLBACK
-# =================================================
-def _fallback() -> dict:
-    return {
+    # -------------------------------------------------
+    # HARD FALLBACK (should almost never happen)
+    # -------------------------------------------------
+    st.error("All Gemini models failed. Returning safe fallback.")
+
+    fallback = {
         "monument_identification": {
             "name": "unknown",
             "confidence_score": 0.0,
@@ -136,8 +137,8 @@ def _fallback() -> dict:
         },
         "visible_damage_assessment": [
             {
-                "damage_type": "no visible damage observed",
-                "description": "No visible damage observed",
+                "damage_type": "none observed",
+                "description": "no visible damage observed",
                 "probable_cause": "n/a",
                 "severity": "low",
                 "approximate_image_region": ""
@@ -147,11 +148,57 @@ def _fallback() -> dict:
         "restoration_guidance": {
             "can_be_restored": "unknown",
             "recommended_methods": [],
-            "preventive_measures": []
+            "preventive_measures": [
+                "Routine visual inspections",
+                "Environmental monitoring",
+                "Visitor impact management"
+            ]
         },
         "first_person_narrative": {
-            "story_from_monument_perspective": ""
+            "story_from_monument_perspective": "Time moves quietly around me."
         }
     }
 
+    yield json.dumps(fallback)
+
+
+# -------------------------------------------------
+# DAMAGE OVERLAY
+# -------------------------------------------------
+def draw_damage_overlay(
+    image: Image.Image,
+    damages: List[dict]
+) -> Image.Image:
+    base = image.convert("RGBA")
+    overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    width, height = base.size
+
+    for dmg in damages:
+        region = dmg.get("approximate_image_region", "")
+        coords = None
+
+        if isinstance(region, list) and len(region) == 4:
+            coords = region
+        elif isinstance(region, str) and "," in region:
+            try:
+                coords = [float(x.strip()) for x in region.split(",")]
+            except Exception:
+                coords = None
+
+        if coords and len(coords) == 4:
+            x1 = int(coords[0] * width)
+            y1 = int(coords[1] * height)
+            x2 = int(coords[2] * width)
+            y2 = int(coords[3] * height)
+
+            draw.rectangle(
+                [x1, y1, x2, y2],
+                fill=(255, 0, 0, 90),
+                outline=(255, 80, 80, 220),
+                width=4
+            )
+
+    return Image.alpha_composite(base, overlay)
 
