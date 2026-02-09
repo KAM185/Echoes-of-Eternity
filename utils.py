@@ -3,6 +3,7 @@ import time
 import json
 import tempfile
 from typing import Generator, Tuple
+import threading
 
 import streamlit as st
 import google.generativeai as genai
@@ -14,25 +15,18 @@ from gtts import gTTS
 # -------------------------------------------------
 @st.cache_resource
 def init_gemini(model_name: str):
-    """
-    Initialize and cache a Gemini model.
-    """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY not found. Please set it in environment variables or Streamlit secrets."
-        )
-
+        raise RuntimeError("GEMINI_API_KEY not found in environment variables.")
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
 
-
 # -------------------------------------------------
-# List of available fallback models
+# List of fallback models (flash first, pro next)
 # -------------------------------------------------
 PRIMARY_MODELS = [
-    "gemini-3-pro-preview",
     "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
     "gemini-3-pro-image-preview",
 ]
 
@@ -44,111 +38,113 @@ SECONDARY_MODELS = [
     "gemini-2.5-flash-image",
 ]
 
+ALL_MODELS = PRIMARY_MODELS + SECONDARY_MODELS
 
 # -------------------------------------------------
-# Gemini analysis with streaming + multi-model fallback
+# Gemini analysis with timeout + multi-model fallback
 # -------------------------------------------------
-def generate_analysis_stream(
-    image: Image.Image,
-    prompt: str,
-) -> Tuple[Generator[str, None, None], dict]:
+def generate_analysis_stream(image: Image.Image, prompt: str, timeout: int = 25) -> Tuple[Generator[str, None, None], dict]:
     """
-    Stream Gemini analysis text using multiple fallback models and return parsed JSON.
+    Stream Gemini analysis text using multiple fallback models.
+    Each model has a timeout in seconds to prevent hanging.
+    Returns (generator of text chunks, parsed JSON dict)
     """
+
+    # Resize image to max 1024x1024 for faster processing
+    max_size = (1024, 1024)
+    if image.width > max_size[0] or image.height > max_size[1]:
+        image = image.copy()
+        image.thumbnail(max_size)
+
     accumulated_text = ""
 
-    def stream_generator() -> Generator[str, None, None]:
-        nonlocal accumulated_text
-
-        # Try all primary + secondary models in order
-        for model_name in PRIMARY_MODELS + SECONDARY_MODELS:
-            try:
-                model = init_gemini(model_name)
-                response = model.generate_content(
-                    [prompt, image],
-                    stream=True,
-                    generation_config={"response_mime_type": "application/json"},
-                )
-                for chunk in response:
-                    if hasattr(chunk, "text") and chunk.text:
-                        accumulated_text += chunk.text
-                        yield chunk.text
-                # Success — stop trying other models
-                return
-            except Exception as e:
-                st.warning(f"Model {model_name} failed. Trying next model…")
-
-        # If all models fail
-        raise RuntimeError("All Gemini models failed to generate a response.")
-
-    # Run the generator once to completion
-    for _ in stream_generator():
-        pass
-
-    # Attempt JSON parsing with retries
-    parsed = {}
-    for attempt in range(3):
+    def try_model(model_name: str, output_list: list):
+        """
+        Internal function to run a model and collect chunks.
+        """
         try:
-            parsed = json.loads(accumulated_text)
+            model = init_gemini(model_name)
+            response = model.generate_content(
+                [prompt, image],
+                stream=True,
+                generation_config={"response_mime_type": "application/json"},
+            )
+            for chunk in response:
+                if hasattr(chunk, "text") and chunk.text:
+                    output_list.append(chunk.text)
+        except Exception as e:
+            output_list.append(f"__MODEL_FAILED__:{str(e)}")
+
+    for model_name in ALL_MODELS:
+        chunks = []
+        thread = threading.Thread(target=try_model, args=(model_name, chunks))
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            st.warning(f"Model {model_name} timed out ({timeout}s). Trying next model…")
+            continue
+
+        # Check if model failed
+        if any(c.startswith("__MODEL_FAILED__") for c in chunks):
+            st.warning(f"Model {model_name} failed. Trying next model…")
+            continue
+
+        # Success: yield chunks
+        def chunk_generator():
+            nonlocal accumulated_text
+            for c in chunks:
+                accumulated_text += c
+                yield c
+
+        # Run once to fill accumulated_text
+        for _ in chunk_generator():
+            pass
+
+        return chunk_generator(), parse_json_safe(accumulated_text)
+
+    raise RuntimeError("All Gemini models failed or timed out.")
+
+# -------------------------------------------------
+# Safe JSON parsing with retries
+# -------------------------------------------------
+def parse_json_safe(text: str, retries: int = 3) -> dict:
+    parsed = {}
+    for _ in range(retries):
+        try:
+            parsed = json.loads(text)
             break
         except json.JSONDecodeError:
-            time.sleep(0.6)
-
-    return stream_generator(), parsed
-
+            time.sleep(0.5)
+    return parsed
 
 # -------------------------------------------------
 # Draw damage overlay on image
 # -------------------------------------------------
-def draw_damage_overlay(
-    image: Image.Image,
-    damaged_areas: list,
-) -> Image.Image:
-    """
-    Draw semi-transparent overlays for damaged areas.
-    """
+def draw_damage_overlay(image: Image.Image, damaged_areas: list) -> Image.Image:
     if not damaged_areas:
         return image
 
     base = image.convert("RGBA")
     overlay = Image.new("RGBA", base.size, (255, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-
     width, height = base.size
 
     for area in damaged_areas:
         bbox = area.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
-
-        x1, y1, x2, y2 = bbox
-        rect = [
-            int(x1 * width),
-            int(y1 * height),
-            int(x2 * width),
-            int(y2 * height),
-        ]
-
-        draw.rectangle(
-            rect,
-            outline=(255, 0, 0, 200),
-            fill=(255, 0, 0, 80),
-        )
+        x1, y1, x2, y2 = [int(v * w) for v, w in zip(bbox, [width, height, width, height])]
+        draw.rectangle(rect := [x1, y1, x2, y2], outline=(255, 0, 0, 200), fill=(255, 0, 0, 80))
 
     return Image.alpha_composite(base, overlay)
-
 
 # -------------------------------------------------
 # Text-to-Speech generation
 # -------------------------------------------------
 def generate_audio(text: str) -> str:
-    """
-    Generate narration audio using gTTS.
-    Returns path to temporary mp3 file, or empty string on failure.
-    """
     if not text.strip():
         return ""
-
     try:
         tts = gTTS(text=text, lang="en")
         tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
