@@ -5,6 +5,14 @@ import json
 import streamlit as st
 from PIL import Image
 
+# 🔍 TEMPORARY DEBUG CHECK
+if st.button("Check API key loaded"):
+    key = os.getenv("GEMINI_API_KEY")
+    if key:
+        st.success(f"API key is loaded (length: {len(key)})")
+    else:
+        st.error("API key NOT found")
+
 from utils import (
     generate_analysis_stream,
     draw_damage_overlay,
