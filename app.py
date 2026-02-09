@@ -22,15 +22,10 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────
-# Page title
-# ────────────────────────────────────────────────
-st.markdown("<h1>Echoes of Eternity</h1>", unsafe_allow_html=True)
-st.markdown('<h3><em>Whispers of history in every stone</em></h3>', unsafe_allow_html=True)
-
-# ────────────────────────────────────────────────
-# Background + transparent UI + glowing title
+# Glowing & fading “aura” title styling
 # ────────────────────────────────────────────────
 bg_url = "https://raw.githubusercontent.com/KAM185/Echoes-of-Eternity/main/bg_final.jpg"
+
 st.markdown(
     f"""
     <style>
@@ -51,11 +46,61 @@ st.markdown(
             max-width: 1150px;
             border: 1px solid rgba(190, 160, 255, 0.20);
         }}
-        /* Your original glowing title and styling remains untouched */
+
+        /* Fainting & glowing title */
+        h1 {{
+            font-family: 'Georgia', serif;
+            font-size: 5rem !important;
+            font-weight: bold;
+            text-align: center;
+            background: linear-gradient(90deg, #0f1c3a, #1e3a5f, #2a4e7a, #3a6aa6, #4a82c6, #6a9ae6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 400% 400%;
+            animation: glowFade 8s ease-in-out infinite, gradientFlow 10s ease infinite;
+            text-shadow:
+                0 0 30px #a78bfa,
+                0 0 60px #c4a1ff,
+                0 0 90px #ffd07a,
+                0 0 140px #ffdb8a,
+                0 0 200px #ffd07a;
+            letter-spacing: 5px;
+            margin: 0.5rem 0 1.2rem 0;
+        }}
+        @keyframes gradientFlow {{
+            0% {{ background-position: 0% 50%; }}
+            50% {{ background-position: 100% 50%; }}
+            100% {{ background-position: 0% 50%; }}
+        }}
+        @keyframes glowFade {{
+            0%, 100% {{ text-shadow:
+                0 0 20px #a78bfa,
+                0 0 40px #c4a1ff,
+                0 0 60px #ffd07a; }}
+            50% {{ text-shadow:
+                0 0 5px #a78bfa,
+                0 0 10px #c4a1ff,
+                0 0 15px #ffd07a; }}
+        }}
+        h3 em {{
+            font-size: 2rem;
+            color: #d4b37a !important;
+            text-align: center;
+            display: block;
+            opacity: 0.92;
+            text-shadow: 0 2px 15px #000;
+        }}
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# ────────────────────────────────────────────────
+# Page title
+# ────────────────────────────────────────────────
+st.markdown("<h1>Echoes of Eternity</h1>", unsafe_allow_html=True)
+st.markdown('<h3><em>Whispers of history in every stone</em></h3>', unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────
 # Session state
@@ -70,7 +115,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ────────────────────────────────────────────────
-# Uploader
+# Image uploader
 # ────────────────────────────────────────────────
 uploaded_file = st.file_uploader(
     "Upload or capture a monument image (jpg/png)",
@@ -93,24 +138,18 @@ if st.button("Awaken the Echo", type="primary", disabled=st.session_state.image 
         st.session_state.analysis_result = None
         stream_placeholder = st.empty()
         full_response = ""
-
         try:
             for chunk in generate_analysis_stream(
                 st.session_state.image,
                 SYSTEM_PROMPT + ANALYSIS_PROMPT,
-            ):
+            )[0]:
                 full_response += chunk
                 stream_placeholder.markdown(full_response + " ▌")
-
             # Parse JSON safely
-            json_str = full_response.strip()
-            if json_str.startswith("```json"):
-                json_str = json_str.split("```json", 1)[1].split("```", 1)[0].strip()
-            result = json.loads(json_str)
+            result = generate_analysis_stream(st.session_state.image, SYSTEM_PROMPT + ANALYSIS_PROMPT)[1]
             st.session_state.analysis_result = result
             stream_placeholder.empty()
             st.success("The echo has awakened.")
-
         except Exception as e:
             st.error("Failed to interpret the echo.")
             stream_placeholder.markdown(f"**Raw response (debug):**\n\n{full_response}")
@@ -133,13 +172,8 @@ if st.session_state.analysis_result:
     with st.expander("Preservation Assessment"):
         pres = res.get("preservation", {})
         st.markdown(f"**Severity score:** {pres.get('severity_score', 'N/A')}/100")
-
         damage_types = pres.get("damage_types", [])
-        if damage_types:
-            st.markdown("**Damage types:** " + ", ".join(damage_types))
-        else:
-            st.markdown("**Damage types:** None major visible")
-
+        st.markdown("**Damage types:** " + (", ".join(damage_types) if damage_types else "None major visible"))
         damaged_areas = pres.get("damaged_areas", [])
         if not damaged_areas:
             st.info("No significant damaged areas detected.")
@@ -150,7 +184,6 @@ if st.session_state.analysis_result:
     story = res.get("storytelling", "")
     if story:
         st.markdown(f'<div class="story">{story}</div>', unsafe_allow_html=True)
-
         audio_path = generate_audio(story)
         if audio_path:
             st.audio(audio_path, format="audio/mp3")
@@ -183,29 +216,25 @@ if st.session_state.analysis_result:
 # Chat
 # ────────────────────────────────────────────────
 st.markdown("## Ask the Echo")
-
 question = st.text_input("Your question to the monument…", key="chat_input")
 
 if question and question.strip():
     st.session_state.chat_history.append({"role": "user", "content": question})
-
     with st.spinner("The monument answers..."):
         try:
-            # Use 3-model priority for chat
-            model = init_gemini("gemini-3-pro-preview")
+            # Use same fallback logic as utils
+            for model_name in ["gemma-3-27b-it","gemma-3-12b-it","gemma-3-4b-it","gemma-3-1b-it",
+                               "gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash"]:
+                try:
+                    model = init_gemini(model_name)
+                    response = model.generate_content(question)
+                    reply = response.text.strip()
+                    break
+                except:
+                    reply = None
+            if not reply:
+                reply = "The winds carry my voice faintly... ask again."
         except:
-            model = init_gemini("gemini-3-flash-preview")
-
-        try:
-            history = [
-                {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
-                for m in st.session_state.chat_history[:-1]
-            ]
-            chat = model.start_chat(history=history)
-            response = chat.send_message(question)
-            reply = response.text.strip()
-        except Exception as e:
-            st.warning("Chat connection issue.")
             reply = "The winds carry my voice faintly... ask again."
 
     st.session_state.chat_history.append({"role": "monument", "content": reply})
