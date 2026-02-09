@@ -1,7 +1,6 @@
 # utils.py
 
 import os
-import time
 import json
 import tempfile
 from typing import Generator, Tuple, List
@@ -13,23 +12,18 @@ from gtts import gTTS
 
 
 # =================================================
-# Gemini model priority (Gemini 3 first)
+# Gemini models (v1beta-safe, no 404s)
 # =================================================
 GEMINI_MODELS: List[str] = [
-    # 🔥 Gemini 3 (try first)
-    "gemini-3.0-pro",
-    "gemini-3.0-flash",
-    "gemini-3.0-flash-lite",
+    # Gemini 3 (preview)
+    "gemini-3.0-pro-preview",
+    "gemini-3.0-flash-preview",
 
-    # Gemini 1.5
+    # Gemini 1.5 (stable)
     "gemini-1.5-pro",
     "gemini-1.5-pro-002",
     "gemini-1.5-flash",
     "gemini-1.5-flash-002",
-
-    # Gemini 1.0
-    "gemini-1.0-pro-vision",
-    "gemini-1.0-pro",
 ]
 
 
@@ -40,7 +34,7 @@ GEMINI_MODELS: List[str] = [
 def init_gemini(model_name: str):
     """
     Initialize and cache a Gemini model.
-    API key is read from environment variable.
+    Compatible with google.generativeai v1beta.
     """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -61,10 +55,9 @@ def generate_analysis_stream(
     prompt: str,
 ) -> Tuple[Generator[str, None, None], dict]:
     """
-    Stream Gemini analysis text with multi-model fallback.
-    Returns:
-      - A generator yielding text chunks (Streamlit-safe)
-      - A parsed JSON dict (empty if parsing fails)
+    Streams Gemini response text and returns:
+      - a replayable generator of text chunks
+      - a parsed JSON dict (empty if parsing fails)
     """
 
     accumulated_text = ""
@@ -84,7 +77,7 @@ def generate_analysis_stream(
                 },
             )
 
-            # Consume stream ONCE
+            # Consume the stream ONCE
             for chunk in response:
                 text = getattr(chunk, "text", "")
                 if isinstance(text, str) and text:
@@ -97,10 +90,14 @@ def generate_analysis_stream(
             except json.JSONDecodeError:
                 parsed = {}
 
-            # Success — stop trying models
+            # Successful model — stop fallback loop
             break
 
         except Exception as e:
+            # Silently skip unsupported / deprecated models
+            if "404" in str(e) or "NotFound" in str(e):
+                continue
+
             last_error = e
             accumulated_text = ""
             streamed_chunks.clear()
