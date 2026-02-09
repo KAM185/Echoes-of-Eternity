@@ -22,12 +22,13 @@ def init_gemini(model_name: str):
     return genai.GenerativeModel(model_name)
 
 # -------------------------------------------------
-# List of fallback models (flash first, pro next)
+# Models fallback list (Gemma 3 first, then Gemini 2.5/2.0)
 # -------------------------------------------------
 PRIMARY_MODELS = [
-    "gemini-3-flash-preview",
-    "gemini-3-pro-preview",
-    "gemini-3-pro-image-preview",
+    "gemma-3-27b-it",
+    "gemma-3-12b-it",
+    "gemma-3-4b-it",
+    "gemma-3-1b-it",
 ]
 
 SECONDARY_MODELS = [
@@ -41,16 +42,29 @@ SECONDARY_MODELS = [
 ALL_MODELS = PRIMARY_MODELS + SECONDARY_MODELS
 
 # -------------------------------------------------
-# Gemini analysis with timeout + multi-model fallback
+# Safe JSON parsing
+# -------------------------------------------------
+def parse_json_safe(text: str, retries: int = 3) -> dict:
+    parsed = {}
+    for _ in range(retries):
+        try:
+            parsed = json.loads(text)
+            break
+        except json.JSONDecodeError:
+            time.sleep(0.5)
+    return parsed
+
+# -------------------------------------------------
+# Gemini analysis with timeout + fallback
 # -------------------------------------------------
 def generate_analysis_stream(image: Image.Image, prompt: str, timeout: int = 25) -> Tuple[Generator[str, None, None], dict]:
     """
     Stream Gemini analysis text using multiple fallback models.
-    Each model has a timeout in seconds to prevent hanging.
+    Each model has a timeout to prevent hanging.
     Returns (generator of text chunks, parsed JSON dict)
     """
 
-    # Resize image to max 1024x1024 for faster processing
+    # Resize image to max 1024x1024
     max_size = (1024, 1024)
     if image.width > max_size[0] or image.height > max_size[1]:
         image = image.copy()
@@ -59,9 +73,6 @@ def generate_analysis_stream(image: Image.Image, prompt: str, timeout: int = 25)
     accumulated_text = ""
 
     def try_model(model_name: str, output_list: list):
-        """
-        Internal function to run a model and collect chunks.
-        """
         try:
             model = init_gemini(model_name)
             response = model.generate_content(
@@ -85,7 +96,6 @@ def generate_analysis_stream(image: Image.Image, prompt: str, timeout: int = 25)
             st.warning(f"Model {model_name} timed out ({timeout}s). Trying next model…")
             continue
 
-        # Check if model failed
         if any(c.startswith("__MODEL_FAILED__") for c in chunks):
             st.warning(f"Model {model_name} failed. Trying next model…")
             continue
@@ -103,20 +113,7 @@ def generate_analysis_stream(image: Image.Image, prompt: str, timeout: int = 25)
 
         return chunk_generator(), parse_json_safe(accumulated_text)
 
-    raise RuntimeError("All Gemini models failed or timed out.")
-
-# -------------------------------------------------
-# Safe JSON parsing with retries
-# -------------------------------------------------
-def parse_json_safe(text: str, retries: int = 3) -> dict:
-    parsed = {}
-    for _ in range(retries):
-        try:
-            parsed = json.loads(text)
-            break
-        except json.JSONDecodeError:
-            time.sleep(0.5)
-    return parsed
+    raise RuntimeError("All models failed or timed out.")
 
 # -------------------------------------------------
 # Draw damage overlay on image
@@ -135,7 +132,7 @@ def draw_damage_overlay(image: Image.Image, damaged_areas: list) -> Image.Image:
         if not bbox or len(bbox) != 4:
             continue
         x1, y1, x2, y2 = [int(v * w) for v, w in zip(bbox, [width, height, width, height])]
-        draw.rectangle(rect := [x1, y1, x2, y2], outline=(255, 0, 0, 200), fill=(255, 0, 0, 80))
+        draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 200), fill=(255, 0, 0, 80))
 
     return Image.alpha_composite(base, overlay)
 
